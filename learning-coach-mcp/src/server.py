@@ -306,6 +306,79 @@ async def search_past_insights(
         return {"error": str(e), "results": [], "count": 0}
 
 
+@mcp.tool()
+async def run_agent(
+    goal: str,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Run the autonomous learning coach agent.
+
+    The agent will execute a SENSE → PLAN → ACT → OBSERVE → REFLECT loop
+    to achieve your learning goal autonomously.
+
+    Args:
+        goal: Natural language goal (e.g., "Help me learn about attention mechanisms",
+              "Generate my daily digest", "Find resources on transformers")
+        user_id: UUID of the user (default: DEFAULT_USER_ID)
+
+    Returns:
+        JSON with output, execution logs, iteration count, and status
+
+    Example:
+        >>> result = await run_agent(goal="Generate my daily digest")
+        >>> print(result['output'])
+        >>> print(result['logs'])
+    """
+    logger.info(f"Running agent with goal: {goal}")
+
+    try:
+        from agent.controller import AgentController, AgentConfig
+
+        # Get agent configuration from environment
+        config = AgentConfig(
+            max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "10")),
+            llm_model=os.getenv("AGENT_LLM_MODEL", "gpt-4o-mini"),
+            temperature=float(os.getenv("AGENT_TEMPERATURE", "0.3")),
+            log_level=os.getenv("AGENT_LOG_LEVEL", "INFO"),
+        )
+
+        # Initialize agent controller
+        controller = AgentController(
+            config=config,
+            supabase_url=SUPABASE_URL,
+            supabase_key=SUPABASE_KEY,
+            openai_api_key=OPENAI_API_KEY,
+            anthropic_api_key=ANTHROPIC_API_KEY,
+        )
+
+        # Run agent
+        result = await controller.run(
+            goal=goal,
+            user_id=user_id or DEFAULT_USER_ID
+        )
+
+        logger.info(
+            f"Agent completed: status={result.status}, "
+            f"iterations={result.iteration_count}"
+        )
+
+        return {
+            "output": result.output,
+            "logs": result.logs,
+            "iterations": result.iteration_count,
+            "status": result.status,
+            "session_id": result.session_id,
+        }
+
+    except Exception as e:
+        logger.error(f"Error running agent: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "message": "Agent execution failed. Check logs for details.",
+        }
+
+
 # ============================================================================
 # MCP UI RESOURCES
 # ============================================================================

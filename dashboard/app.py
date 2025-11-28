@@ -107,7 +107,7 @@ with st.sidebar:
     # Navigation
     page = st.radio(
         "Navigation",
-        ["📚 Today's Digest", "⚙️ Settings"],
+        ["📚 Today's Digest", "🤖 Agent Mode", "⚙️ Settings"],
         label_visibility="collapsed"
     )
 
@@ -153,6 +153,10 @@ with st.sidebar:
 if page == "📚 Today's Digest":
     from views import home
     home.show()
+
+elif page == "🤖 Agent Mode":
+    from views import agent
+    agent.show()
 
 elif page == "⚙️ Settings":
     from views import settings

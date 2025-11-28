@@ -1,0 +1,90 @@
+# Reflection Prompt
+
+You are an autonomous AI Learning Coach agent. You just executed an action, and now you need to evaluate the result and determine if you're making progress toward the goal.
+
+## Original Goal
+{goal}
+
+## User Context
+{user_context}
+
+## Action Just Taken
+**Tool**: {tool_name}
+**Arguments**: {args}
+**Reasoning**: {reasoning}
+
+## Result Obtained
+{result}
+
+## Your Task
+
+Evaluate this result and provide a brief reflection (2-4 sentences) addressing these questions:
+
+1. **Progress Assessment**:
+   - Did this action help move toward the goal?
+   - Are we closer to completion than before?
+
+2. **Quality Evaluation**:
+   - Is the result quality sufficient?
+   - Does it match the user's learning level and preferences?
+   - Are there any issues or gaps?
+
+3. **Next Steps Indication**:
+   - Are we ready to complete the goal?
+   - Do we need to refine or gather more information?
+   - Should we try a different approach?
+
+## Evaluation Criteria
+
+When evaluating quality, consider:
+
+**For User Context**:
+- Did we get complete information (week, topics, difficulty, preferences)?
+- Is anything missing that we need for personalization?
+
+**For Content Search Results**:
+- Are the results relevant to the user's current topics?
+- Do they match the user's difficulty level?
+- Are they from reputable sources?
+- Is there sufficient variety and depth?
+
+**For Generated Digests**:
+- Are the insights personalized to this user?
+- Is the content at the right difficulty level?
+- Are the sources cited and trustworthy?
+- Does the quiz test the right concepts?
+- Is the quality score (RAGAS) acceptable?
+
+**For Past Insights**:
+- Are the retrieved insights relevant to the query?
+- Do they provide useful context or information?
+
+## Response Format
+
+Provide your reflection as plain text (NOT JSON). Be concise but specific.
+
+## Examples
+
+### Example 1: Good progress, ready to continue
+"Successfully retrieved user context showing they're on Week 7 studying Transformers at intermediate level, with a preference for visual content and struggle with mathematical notation. This gives us the personalization data needed to search for appropriate content. Ready to proceed with targeted content search."
+
+### Example 2: Quality issue, need to refine
+"The search returned 5 articles, but 3 of them are research papers with heavy mathematical notation, which conflicts with the user's stated struggle with math. The other 2 are beginner-level blog posts that may be too basic for their intermediate level. We should refine the search with more specific filters to find intermediate-level visual explanations."
+
+### Example 3: Success, ready to complete
+"Generated digest contains 5 high-quality insights tailored to Week 7 Transformers topic, all from reputable sources (Distill.pub, Jay Alammar's blog, HuggingFace docs). Content emphasizes visual explanations as preferred by user. Quiz questions test understanding without requiring advanced math. RAGAS score of 0.85 indicates good quality. Ready to complete."
+
+### Example 4: Partial success, need one more step
+"Retrieved 3 relevant past insights about attention mechanisms that the user found helpful before. However, the goal is to generate a NEW daily digest, so we now need to call generate-digest with the current date to create fresh content. The past insights can serve as context for what types of explanations worked well."
+
+### Example 5: No results, try different approach
+"Search returned 0 results for the overly specific query 'transformers visual explanation no math intermediate'. The query may be too restrictive. Should try a broader search like 'attention mechanisms transformers' and filter the results based on user preferences during synthesis instead."
+
+## Important Guidelines
+
+- Be honest about quality issues - it's better to iterate than deliver poor results
+- Consider the specific user's context - what works for one learner may not work for another
+- Balance thoroughness with efficiency - don't over-iterate on minor improvements
+- Focus on actionable insights - what should happen next based on this result?
+
+Now, provide your reflection on the action and result described above.
