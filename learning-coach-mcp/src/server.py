@@ -333,6 +333,12 @@ async def run_agent(
     logger.info(f"Running agent with goal: {goal}")
 
     try:
+        # Import from standalone agent module (top-level, not inside MCP)
+        import sys
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent
+        sys.path.insert(0, str(project_root))
+
         from agent.controller import AgentController, AgentConfig
 
         # Get agent configuration from environment

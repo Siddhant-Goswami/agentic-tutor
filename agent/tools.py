@@ -5,8 +5,15 @@ Defines tools available to the agent with schemas and execution logic.
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+
+# Add MCP src to path for accessing shared utilities
+project_root = Path(__file__).parent.parent
+mcp_src_path = project_root / "learning-coach-mcp" / "src"
+sys.path.insert(0, str(mcp_src_path))
 
 logger = logging.getLogger(__name__)
 

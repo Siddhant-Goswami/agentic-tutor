@@ -84,10 +84,11 @@ Converting the MCP Workflow into an Autonomous Agent System
 
 | Current Component | Transformation | New Role |
 |------------------|----------------|----------|
-| server.py (MCP tools) | Keep as-is | Tools the agent calls |
+| server.py (MCP tools) | Keep as-is | MCP tool endpoints (can optionally call agent) |
 | rag/ pipeline | Keep as-is | Called by agent via tools |
 | Supabase vector store | Extend | Add agent memory tables |
-| Streamlit dashboard | Extend | Add agent logs panel |
+| Streamlit dashboard | Extend | Add agent view (imports agent directly) |
+| — (new) | Create | **Standalone Agent Module** (top-level) |
 | — (new) | Create | Agent Controller |
 | — (new) | Create | Planning Prompts |
 | — (new) | Create | Safety Gates |
@@ -96,7 +97,7 @@ Converting the MCP Workflow into an Autonomous Agent System
 ## Part 2: New Components Specification
 
 ### 2.1 Agent Controller
-**Location:** `learning-coach-mcp/src/agent/controller.py`
+**Location:** `agent/controller.py` (top-level module, NOT inside MCP)
 
 **Purpose:** Orchestrate the Sense → Plan → Act → Observe → Reflect loop
 
@@ -125,7 +126,7 @@ Converting the MCP Workflow into an Autonomous Agent System
 - `llm_model`: Model for planning/reflection (configurable)
 
 ### 2.2 Planning Prompt System
-**Location:** `learning-coach-mcp/src/agent/prompts/`
+**Location:** `agent/prompts/` (top-level module)
 
 **Files:**
 
@@ -166,9 +167,11 @@ The reflection prompt must ask:
 - Are we ready to complete?
 
 ### 2.3 Tool Registry Extension
-**Location:** `learning-coach-mcp/src/agent/tools.py`
+**Location:** `agent/tools.py` (top-level module)
 
 **Purpose:** Define tools available to the agent with schemas
+
+**Important:** This is NOT an MCP tool registry. This is the agent's internal abstraction layer for calling various services (RAG, database, etc.)
 
 **Tools to Expose (wrapping existing MCP tools):**
 
@@ -524,52 +527,52 @@ Request 3: "Continue helping me learn"
 ```
 ai-learning-coach/
 ├── README.md
-├── learning-coach-mcp/
+│
+├── agent/                               # NEW: Standalone agent module
+│   ├── __init__.py
+│   ├── controller.py                    # Main agent loop
+│   ├── tools.py                         # Tool registry for agent
+│   ├── logger.py                        # Audit logging
+│   ├── prompts/
+│   │   ├── planning.txt                 # Planning prompt
+│   │   ├── reflection.txt               # Reflection prompt
+│   │   └── system.txt                   # Agent persona
+│   └── README.md                        # Agent documentation
+│
+├── learning-coach-mcp/                  # MCP server (agent-free)
 │   ├── src/
-│   │   ├── server.py                    # Existing MCP tools (unchanged)
-│   │   ├── rag/                         # Existing RAG pipeline (unchanged)
-│   │   ├── ingestion/                   # Existing (unchanged)
-│   │   ├── tools/                       # Existing tools (unchanged)
-│   │   │
-│   │   └── agent/                       # NEW: Agent system
-│   │       ├── __init__.py
-│   │       ├── controller.py            # Main agent loop
-│   │       ├── tools.py                 # Tool registry for agent
-│   │       ├── safety.py                # Safety gates
-│   │       ├── logger.py                # Audit logging
-│   │       └── prompts/
-│   │           ├── planning.txt         # Planning prompt
-│   │           ├── reflection.txt       # Reflection prompt
-│   │           └── system.txt           # Agent persona
+│   │   ├── server.py                    # MCP tools (can call agent)
+│   │   ├── rag/                         # RAG pipeline
+│   │   ├── ingestion/                   # Content ingestion
+│   │   ├── tools/                       # Source manager, feedback
+│   │   └── utils/                       # Database utilities
 │   │
 │   ├── tests/
-│   │   └── test_agent/                  # NEW: Agent tests
+│   │   └── test_agent/                  # Agent tests (optional)
 │   │       ├── test_controller.py
-│   │       ├── test_adaptive_difficulty.py  # Lab verification
+│   │       ├── test_adaptive_difficulty.py
 │   │       └── test_safety.py
 │   │
-│   └── pyproject.toml                   # Updated dependencies
+│   └── pyproject.toml
 │
 ├── dashboard/
-│   ├── app.py                           # Updated with agent mode
+│   ├── app.py
 │   ├── views/
-│   │   ├── home.py                      # Existing
-│   │   ├── settings.py                  # Existing
-│   │   └── agent.py                     # NEW: Agent UI
+│   │   ├── home.py
+│   │   ├── settings.py
+│   │   └── agent.py                     # Imports from agent/
 │   └── components/
-│       ├── log_viewer.py                # NEW: Live log display
-│       └── approval_modal.py            # NEW: Safety approval UI
+│       └── log_viewer.py                # Live log display
 │
 ├── database/
 │   └── migrations/
-│       ├── 001_initial_schema.sql       # Existing
-│       ├── 003_insert_test_data...      # Existing
-│       ├── 004_add_test_user_rls...     # Existing
+│       ├── 001_initial_schema.sql
+│       ├── 003_insert_test_data...
+│       ├── 004_add_test_user_rls...
 │       └── 005_agent_tables.sql         # NEW: Agent tables
 │
-└── docs/
-    ├── AGENT_ARCHITECTURE.md            # NEW: Agent documentation
-    └── LAB_INSTRUCTIONS.md              # NEW: Student lab guide
+├── test_agent.py                        # Tests agent module
+└── test_e2e.py                          # End-to-end tests
 ```
 
 ## Part 7: Dependencies

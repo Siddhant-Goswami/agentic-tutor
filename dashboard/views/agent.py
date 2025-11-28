@@ -12,10 +12,8 @@ import asyncio
 
 # Add parent directories to path for imports
 dashboard_path = Path(__file__).parent.parent
-learning_coach_path = dashboard_path.parent / "learning-coach-mcp"
-src_path = learning_coach_path / "src"
-sys.path.insert(0, str(src_path))
-sys.path.insert(0, str(learning_coach_path))
+project_root = dashboard_path.parent
+sys.path.insert(0, str(project_root))
 
 
 def show():

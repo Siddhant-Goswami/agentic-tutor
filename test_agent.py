@@ -12,14 +12,11 @@ from dotenv import load_dotenv
 
 # Setup paths
 project_root = Path(__file__).parent
-learning_coach_path = project_root / "learning-coach-mcp"
-src_path = learning_coach_path / "src"
 
-sys.path.insert(0, str(src_path))
-sys.path.insert(0, str(learning_coach_path))
+sys.path.insert(0, str(project_root))
 
 # Load environment
-env_path = learning_coach_path / ".env"
+env_path = project_root / "learning-coach-mcp" / ".env"
 load_dotenv(env_path)
 
 # Import agent components
