@@ -32,6 +32,7 @@ class IngestionOrchestrator:
         overlap: int = 100,
         embedding_model: str = "text-embedding-3-small",
         embedding_dimensions: int = 1536,
+        fetch_full_content: bool = True,
     ):
         """
         Initialize ingestion orchestrator.
@@ -44,9 +45,10 @@ class IngestionOrchestrator:
             overlap: Overlap between chunks
             embedding_model: OpenAI embedding model
             embedding_dimensions: Embedding vector dimensions
+            fetch_full_content: Whether to fetch full article content from URLs
         """
         self.db = get_supabase_client(supabase_url, supabase_key)
-        self.rss_fetcher = RSSFetcher()
+        self.rss_fetcher = RSSFetcher(fetch_full_content=fetch_full_content)
         self.chunker = TextChunker(chunk_size=chunk_size, overlap=overlap)
         self.embedder = Embedder(
             api_key=openai_api_key,
@@ -148,6 +150,8 @@ class IngestionOrchestrator:
         articles_processed = 0
         chunks_created = 0
         duplicates_skipped = 0
+        full_content_count = 0
+        summary_only_count = 0
 
         for article in articles:
             try:
@@ -167,6 +171,13 @@ class IngestionOrchestrator:
                     logger.debug(f"Skipping duplicate article: {article['title']}")
                     continue
 
+                # Track content source
+                content_source = article.get("content_source", "rss_summary")
+                if content_source == "full_article":
+                    full_content_count += 1
+                else:
+                    summary_only_count += 1
+
                 # Store article in content table
                 content_result = (
                     self.db.table("content")
@@ -184,6 +195,7 @@ class IngestionOrchestrator:
                             "metadata": {
                                 "tags": article.get("tags", []),
                                 "word_count": len(article["content"].split()),
+                                "content_source": content_source,
                             },
                         }
                     )
@@ -231,6 +243,8 @@ class IngestionOrchestrator:
             "articles_processed": articles_processed,
             "chunks_created": chunks_created,
             "duplicates_skipped": duplicates_skipped,
+            "full_content_fetched": full_content_count,
+            "summary_only": summary_only_count,
         }
 
     async def _update_source_health(self, source_id: str, success: bool) -> None:

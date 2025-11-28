@@ -224,6 +224,16 @@ def _render_digest_output(output: dict) -> None:
     """
     digest = output.get("digest", output)
 
+    # Check if this is a partial digest (timeout result)
+    is_partial = digest.get("status") == "partial"
+
+    if is_partial:
+        # Show warning for partial results
+        warning = digest.get("warning", "")
+        if warning:
+            st.warning(f"⚠️ **Partial Result**\n\n{warning}")
+            st.markdown("---")
+
     # Quality scores
     if "ragas_scores" in digest:
         scores = digest["ragas_scores"]
@@ -252,17 +262,24 @@ def _render_digest_output(output: dict) -> None:
         st.markdown(f"#### 💡 Learning Insights ({len(insights)})")
 
         for i, insight in enumerate(insights, 1):
-            with st.expander(f"{i}. {insight.get('title', 'Untitled')}", expanded=(i == 1)):
-                content = insight.get("content", "")
-                st.markdown(content)
+            # Handle both string insights (partial digest) and object insights (full digest)
+            if isinstance(insight, str):
+                # Simple string insight from partial digest
+                with st.expander(f"{i}. Insight", expanded=(i == 1)):
+                    st.markdown(insight)
+            else:
+                # Object insight with title and content
+                with st.expander(f"{i}. {insight.get('title', 'Untitled')}", expanded=(i == 1)):
+                    content = insight.get("content", "")
+                    st.markdown(content)
 
-                # Source
-                source = insight.get("source", {})
-                if source:
-                    st.caption(
-                        f"📚 Source: {source.get('identifier', 'Unknown')} | "
-                        f"Published: {source.get('published_at', 'N/A')}"
-                    )
+                    # Source
+                    source = insight.get("source", {})
+                    if source:
+                        st.caption(
+                            f"📚 Source: {source.get('identifier', 'Unknown')} | "
+                            f"Published: {source.get('published_at', 'N/A')}"
+                        )
 
         st.markdown("---")
 
@@ -290,6 +307,36 @@ def _render_digest_output(output: dict) -> None:
 
         st.markdown("---")
 
+    # Recommendations (for partial digests)
+    recommendations = digest.get("recommendations", [])
+    if recommendations:
+        st.markdown("#### 🎯 Recommendations")
+        for rec in recommendations:
+            st.markdown(f"- {rec}")
+        st.markdown("---")
+
+    # Missing items (for partial digests)
+    missing = digest.get("missing", [])
+    if missing:
+        st.markdown("#### ❓ What Was Missing")
+        for item in missing:
+            st.markdown(f"- {item}")
+        st.markdown("---")
+
+    # Assumptions (for partial digests)
+    assumptions = digest.get("assumptions", [])
+    if assumptions:
+        st.markdown("#### 💭 Assumptions Made")
+        for assumption in assumptions:
+            st.markdown(f"- {assumption}")
+        st.markdown("---")
+
+    # Sources summary (for partial digests)
+    sources_summary = digest.get("sources_summary", "")
+    if sources_summary:
+        st.info(f"**Sources Summary:** {sources_summary}")
+        st.markdown("---")
+
     # Sources
     sources = digest.get("sources", [])
 
@@ -299,9 +346,13 @@ def _render_digest_output(output: dict) -> None:
         for source in sources:
             url = source.get("url", "#")
             title = source.get("title", "Untitled")
-            identifier = source.get("identifier", "Unknown")
+            identifier = source.get("identifier", source.get("snippet", "Unknown"))
+            published = source.get("published_at", "")
 
-            st.markdown(f"- [{title}]({url}) - {identifier}")
+            if published:
+                st.markdown(f"- [{title}]({url}) - {identifier} ({published})")
+            else:
+                st.markdown(f"- [{title}]({url}) - {identifier}")
 
     # Full output option
     with st.expander("🔍 View Full Output (JSON)"):

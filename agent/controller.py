@@ -158,8 +158,14 @@ class AgentController:
                 # ACT: Execute the planned action
                 result = await self._act(plan, session_id, iteration)
 
-                # OBSERVE: Log the result
+                # OBSERVE: Log the result and store in context
                 self._observe(plan, result, session_id, iteration)
+
+                # Store search results in context for partial digest generation
+                if plan.get("tool") == "search-content" and "results" in result:
+                    if "search_results" not in context:
+                        context["search_results"] = []
+                    context["search_results"].extend(result.get("results", []))
 
                 # REFLECT: Evaluate progress
                 reflection = await self._reflect(
@@ -177,24 +183,27 @@ class AgentController:
                     }
                 )
 
-            # Max iterations reached
+            # Max iterations reached - generate best-effort output
             logger.warning(f"Max iterations ({self.config.max_iterations}) reached")
+
+            # Try to generate a partial result with what we have
+            partial_output = await self._generate_partial_result(
+                goal, context, session_id
+            )
+
             self.logger.log(
                 session_id,
                 "COMPLETE",
                 {
                     "status": "timeout",
                     "message": f"Max iterations ({self.config.max_iterations}) reached",
-                    "context": context,
+                    "partial_output": partial_output,
                 },
             )
-            self.logger.complete_session(session_id, "timeout")
+            self.logger.complete_session(session_id, "timeout", partial_output)
 
             return AgentResult(
-                output={
-                    "message": "Agent reached maximum iterations without completing goal",
-                    "partial_context": context,
-                },
+                output=partial_output,
                 logs=self.logger.get_logs(session_id),
                 iteration_count=iteration,
                 status="timeout",
@@ -496,6 +505,138 @@ class AgentController:
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
+
+    async def _generate_partial_result(
+        self, goal: str, context: Dict[str, Any], session_id: uuid.UUID
+    ) -> Dict[str, Any]:
+        """
+        Generate a partial result when max iterations reached.
+
+        Creates a digest with whatever content was gathered, along with
+        warnings about what was missing and assumptions made.
+
+        Args:
+            goal: Original user goal
+            context: Current context with iteration history
+            session_id: Session UUID
+
+        Returns:
+            Partial result dictionary with digest and warnings
+        """
+        logger.info("Generating partial result from gathered content")
+
+        # Collect all search results from iteration history
+        all_results = []
+        search_iterations = []
+        sources = []
+
+        for hist in context.get("iteration_history", []):
+            if hist.get("tool") == "search-content":
+                search_iterations.append(hist["iteration"])
+
+        # Extract actual search results from the agent's tool execution context
+        # This will be stored in the context if the agent executed search-content
+        if "search_results" in context:
+            all_results = context.get("search_results", [])
+            # Extract sources with citations
+            for result in all_results[:10]:  # Limit to 10 sources
+                if isinstance(result, dict):
+                    sources.append({
+                        "title": result.get("title", "Untitled"),
+                        "url": result.get("url", ""),
+                        "snippet": result.get("snippet", "")[:150],
+                        "published_at": result.get("published_at", ""),
+                    })
+
+        # Use LLM to synthesize whatever we found
+        synthesis_prompt = f"""
+You are helping create a learning digest, but the agent reached maximum iterations before completing.
+
+Goal: {goal}
+
+User Context: {json.dumps(context.get("user_context", {}), indent=2)}
+
+Iterations Completed: {len(context.get("iteration_history", []))}
+
+Search Attempts: {search_iterations}
+
+Last Reflection: {context.get("last_reflection", "None")}
+
+Sources Found ({len(sources)} items):
+{json.dumps(sources, indent=2) if sources else "No sources found"}
+
+TASK: Generate a partial learning digest with:
+1. A warning message explaining what happened
+2. Any insights you can provide based on the goal, context, and sources (even if limited)
+3. Recommendations for what the user should search for manually
+4. Acknowledgment of what was missing or assumed
+5. If sources were found, mention them and what they cover
+
+Format your response as JSON:
+{{
+  "warning": "Message about partial results and what was assumed",
+  "insights": ["Insight 1 based on available sources", "Insight 2", ...],
+  "sources_summary": "Brief summary of what the {len(sources)} sources cover (if any)",
+  "recommendations": ["What to search for", ...],
+  "missing": ["What couldn't be found", ...],
+  "assumptions": ["What was assumed due to lack of data", ...],
+  "status": "partial"
+}}
+"""
+
+        try:
+            response = await self.llm_client.chat.completions.create(
+                model=self.config.llm_model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": synthesis_prompt},
+                ],
+                temperature=self.config.temperature,
+                max_tokens=800,
+            )
+
+            response_text = response.choices[0].message.content.strip()
+            partial_result = self._parse_json_response(response_text)
+
+            # Add metadata and sources
+            partial_result["iterations_used"] = len(context.get("iteration_history", []))
+            partial_result["max_iterations"] = self.config.max_iterations
+            partial_result["goal"] = goal
+            partial_result["sources"] = sources  # Include citation links
+
+            return partial_result
+
+        except Exception as e:
+            logger.error(f"Error generating partial result: {e}", exc_info=True)
+
+            # Fallback partial result
+            return {
+                "warning": f"⚠️ Agent reached maximum iterations ({self.config.max_iterations}) without fully completing your goal.",
+                "insights": [
+                    f"Your learning goal was: {goal}",
+                    f"You are currently on Week {context.get('user_context', {}).get('week', 'N/A')}",
+                    f"Topics: {', '.join(context.get('user_context', {}).get('topics', []))}",
+                ],
+                "sources_summary": f"Found {len(sources)} potential sources, but could not synthesize them into a complete digest.",
+                "recommendations": [
+                    "Try breaking down your goal into smaller, more specific requests",
+                    "Search directly for specific topics you want to learn about",
+                    "Use the search-content tool with more specific queries",
+                ],
+                "missing": [
+                    "Could not find sufficient relevant content within iteration limit",
+                    "May need to refine search criteria or add more content sources",
+                ],
+                "assumptions": [
+                    "Assumed intermediate difficulty level based on user profile",
+                    "Could not verify content quality due to iteration limit",
+                ],
+                "status": "partial",
+                "iterations_used": len(context.get("iteration_history", [])),
+                "max_iterations": self.config.max_iterations,
+                "goal": goal,
+                "sources": sources,  # Include citations even in fallback
+            }
 
     def _parse_json_response(self, response_text: str) -> Dict[str, Any]:
         """

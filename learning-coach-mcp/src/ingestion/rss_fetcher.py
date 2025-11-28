@@ -11,26 +11,36 @@ from typing import List, Dict, Any, Optional
 import httpx
 from bs4 import BeautifulSoup
 
+from .content_extractor import ContentExtractor
+
 logger = logging.getLogger(__name__)
 
 
 class RSSFetcher:
     """Fetcher for RSS feeds."""
 
-    def __init__(self, user_agent: str = "AI Learning Coach/1.0"):
+    def __init__(
+        self,
+        user_agent: str = "AI Learning Coach/1.0",
+        fetch_full_content: bool = True,
+    ):
         """
         Initialize RSS fetcher.
 
         Args:
             user_agent: User agent string for HTTP requests
+            fetch_full_content: Whether to fetch full article content from URLs
         """
         self.user_agent = user_agent
+        self.fetch_full_content = fetch_full_content
+        self.content_extractor = ContentExtractor(user_agent) if fetch_full_content else None
 
     async def fetch_feed(
         self,
         feed_url: str,
         since: Optional[datetime] = None,
         max_articles: int = 50,
+        fetch_full_content: Optional[bool] = None,
     ) -> List[Dict[str, Any]]:
         """
         Fetch articles from an RSS feed.
@@ -39,6 +49,7 @@ class RSSFetcher:
             feed_url: URL of the RSS feed
             since: Only fetch articles published after this timestamp (optional)
             max_articles: Maximum number of articles to return (default: 50)
+            fetch_full_content: Override instance setting for fetching full content
 
         Returns:
             List of article dictionaries
@@ -47,6 +58,12 @@ class RSSFetcher:
             Exception: If feed cannot be fetched or parsed
         """
         logger.info(f"Fetching RSS feed: {feed_url}")
+
+        # Determine if we should fetch full content
+        should_fetch_full = (
+            fetch_full_content if fetch_full_content is not None
+            else self.fetch_full_content
+        )
 
         try:
             # Fetch feed with custom user agent
@@ -71,6 +88,33 @@ class RSSFetcher:
             for entry in feed.entries[:max_articles]:
                 article = self._parse_entry(entry)
 
+                # Fetch full content if enabled
+                if should_fetch_full and article.get("url"):
+                    logger.info(f"Fetching full content for: {article['title'][:60]}...")
+
+                    try:
+                        full_content = await self.content_extractor.extract(article["url"])
+
+                        if full_content and len(full_content) > len(article["content"]):
+                            original_length = len(article["content"])
+                            article["content"] = full_content
+                            article["content_source"] = "full_article"
+                            logger.info(
+                                f"✓ Extracted full content: {len(full_content)} chars "
+                                f"({len(full_content.split())} words) "
+                                f"[was {original_length} chars]"
+                            )
+                        else:
+                            article["content_source"] = "rss_summary"
+                            logger.warning(
+                                f"⚠ Using RSS summary for: {article['title'][:60]}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error fetching full content: {e}")
+                        article["content_source"] = "rss_summary"
+                else:
+                    article["content_source"] = "rss_summary"
+
                 # Filter by date if specified
                 if since and article.get("published_at"):
                     if article["published_at"] <= since:
@@ -78,7 +122,11 @@ class RSSFetcher:
 
                 articles.append(article)
 
-            logger.info(f"Fetched {len(articles)} articles from {feed_url}")
+            full_count = sum(1 for a in articles if a.get("content_source") == "full_article")
+            logger.info(
+                f"Fetched {len(articles)} articles from {feed_url} "
+                f"({full_count} with full content)"
+            )
             return articles
 
         except httpx.HTTPError as e:
