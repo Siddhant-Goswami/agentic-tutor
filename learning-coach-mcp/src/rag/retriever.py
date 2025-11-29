@@ -47,7 +47,7 @@ class VectorRetriever:
         query: str,
         user_id: str,
         top_k: int = 15,
-        similarity_threshold: float = 0.70,
+        similarity_threshold: float = 0.40,
         min_sources: int = 3,
         recency_weight: float = 0.3,
         priority_weight: float = 0.1,
@@ -60,7 +60,7 @@ class VectorRetriever:
             query: Search query text
             user_id: User ID for filtering sources
             top_k: Number of top results to return (default: 15)
-            similarity_threshold: Minimum cosine similarity (default: 0.70)
+            similarity_threshold: Minimum cosine similarity (default: 0.40)
             min_sources: Minimum number of different sources in results (default: 3)
             recency_weight: Weight for recency score (default: 0.3)
             priority_weight: Weight for source priority (default: 0.1)
