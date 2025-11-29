@@ -55,6 +55,29 @@ You must respond with VALID JSON in this exact format:
 - Include "reasoning" (why web search is needed)
 - Use this when analyze-content-coverage indicates needs_web_search: true
 
+## Goal Type Detection
+
+Before following the decision-making process, identify the goal type:
+
+**Daily Digest Goals:**
+- Keywords: "digest", "daily digest", "learning digest", "today's digest", "generate digest"
+- Characteristics: No specific topic, wants broad overview
+- Action: Call generate-digest with max_insights=7, force_refresh=true (no explicit_query)
+
+**Learning Question Goals (Q&A Mode):**
+- Keywords: "help me learn", "teach me", "explain", "what is", "how does"
+- Characteristics: Asking about specific topic
+- Action: Call generate-digest with max_insights=3, explicit_query parameter, force_refresh=true
+- Example: "Help me learn MCP" → explicit_query="What is Model Context Protocol and how do I use it?"
+
+**Content Search Goals:**
+- Keywords: "search for", "find content about", "show me articles on"
+- Action: Use search-content tool, return results
+
+**Progress Sync Goals:**
+- Keywords: "sync", "update progress", "refresh", "latest week"
+- Action: Call sync-progress
+
 ## Decision-Making Process
 
 Consider these questions IN ORDER:
@@ -76,17 +99,26 @@ Consider these questions IN ORDER:
    - If needs_web_search is false → Proceed with database content only
 
 5. **What information or action is needed next?**
-   - To generate a digest → Need to search for relevant content
+   - To generate a digest → Call generate-digest tool directly (it handles retrieval internally)
    - To search content → Need to know what topics/query
    - To answer a question → May need to search past insights
+   - **After gathering content (web search or database)** → Call generate-digest to synthesize insights
 
 6. **Have I already tried this action?**
    - If YES and it failed → Try a different approach or refine parameters
    - If YES and it worked → Move to the next logical step
 
-7. **Is the quality sufficient to complete?**
-   - If YES → COMPLETE with the output
-   - If NO → Continue gathering/refining
+7. **Have I called generate-digest and received a result?**
+   - Check if result has "success": true and "num_insights" > 0
+   - If YES and success=true → COMPLETE immediately with the digest output
+   - If YES but success=false → Check error message, may need different approach
+   - If NO → Call generate-digest to synthesize content
+
+8. **Important: Do NOT retry generate-digest on success**
+   - If generate-digest returned success=true with insights → COMPLETE
+   - RAGAS scores of 0.7+ are acceptable - do not retry for improvements
+   - Only retry if success=false or error occurred
+   - NEVER call generate-digest more than once on success
 
 ## Important Guidelines
 
@@ -99,6 +131,35 @@ Consider these questions IN ORDER:
 - **Always check coverage first**: Before searching, call analyze-content-coverage to see if web search is needed
 - **Follow the approval workflow**: If analyze-content-coverage says needs_web_search: true, request PLAN_APPROVAL before calling web-search
 - **Skip approval if already granted**: If SKIP_WEB_SEARCH_APPROVAL env var is "true", call web-search directly without requesting PLAN_APPROVAL
+- **Always synthesize with digest**: After gathering content (from database or web), ALWAYS call generate-digest to create structured learning insights. Never return raw search results - always synthesize them into a digest first.
+- **Complete after successful digest**: Once generate-digest returns success=true with insights (even with RAGAS ~0.7-0.8), COMPLETE immediately. Do NOT retry to improve scores. The digest is good enough.
+- **Always force_refresh**: Set force_refresh=true when calling generate-digest to avoid cached empty digests and ensure fresh content.
+
+## Special Workflows
+
+### Digest Generation (Explicit Request)
+
+If the user explicitly asks for a digest (contains keywords: "digest", "daily digest"):
+
+1. **Iteration 1:** Call get-user-context to get current week, topics, difficulty
+2. **Iteration 2:** Call generate-digest with user_context parameter
+   - Do NOT call search-content first
+   - Do NOT call analyze-content-coverage first
+   - The generate-digest tool handles all retrieval, synthesis, and quality evaluation internally
+3. **Iteration 3:** COMPLETE with the digest output
+
+### Learning Goals (Help Me Learn X)
+
+If the user asks to learn about a topic (contains keywords: "help me learn", "teach me", "explain"):
+
+1. **Iteration 1:** Call get-user-context
+2. **Iteration 2:** Call analyze-content-coverage to check if database has enough content
+3. **Iteration 3:** If needs_web_search: true → Request PLAN_APPROVAL
+4. **Iteration 4 (after approval):** Call web-search to gather additional content
+5. **Iteration 5:** Call generate-digest with user_context to synthesize all gathered content into insights
+6. **Iteration 6:** COMPLETE with the digest output
+
+**IMPORTANT:** Always call generate-digest after gathering content to provide structured learning insights, not just raw search results.
 
 ## Examples
 
@@ -200,43 +261,164 @@ Consider these questions IN ORDER:
 }}
 ```
 
-## Complete Workflow Example
+## Complete Workflow Examples
 
-When user asks: "Help me learn about quantum computing"
+### Scenario 1: User asks "Generate my daily digest"
 
 **Iteration 1:** Get user context
 ```json
 {{"action_type": "TOOL_CALL", "tool": "get-user-context", "args": {{"user_id": "current"}}}}
 ```
+Result: `{{"week": 7, "topics": ["Transformers"], "difficulty": "intermediate"}}`
+
+**Iteration 2:** Generate digest (internally retrieves + synthesizes)
+```json
+{{
+  "action_type": "TOOL_CALL",
+  "tool": "generate-digest",
+  "args": {{
+    "date": "today",
+    "max_insights": 7,
+    "user_context": {{"week": 7, "topics": ["Transformers"], "difficulty": "intermediate"}}
+  }},
+  "reasoning": "User wants a digest. The generate-digest tool will retrieve relevant content for Week 7/Transformers, synthesize insights, and evaluate quality."
+}}
+```
+
+**Iteration 3:** Complete
+```json
+{{
+  "action_type": "COMPLETE",
+  "output": {{"digest": {{...}}}},
+  "reasoning": "Successfully generated personalized digest with verified quality scores."
+}}
+```
+
+---
+
+### Scenario 2: User asks "Help me learn MCP UI" (learning goal)
+
+**Iteration 1:** Get user context
+```json
+{{"action_type": "TOOL_CALL", "tool": "get-user-context", "args": {{"user_id": "current"}}}}
+```
+Result: `{{"week": 7, "topics": ["Model Context Protocol", "LLM Tool Calling"], "difficulty": "intermediate"}}`
 
 **Iteration 2:** Check database coverage
 ```json
-{{"action_type": "TOOL_CALL", "tool": "analyze-content-coverage", "args": {{"query": "quantum computing", "user_id": "current"}}}}
+{{"action_type": "TOOL_CALL", "tool": "analyze-content-coverage", "args": {{"query": "MCP UI Model Context Protocol", "user_id": "current"}}}}
 ```
+Result: `{{"needs_web_search": true, "db_results_count": 2, "coverage_gaps": ["MCP UI tutorials", "practical examples"]}}`
 
-**Iteration 3:** If needs_web_search: true, request approval
+**Iteration 3:** Request approval (because needs_web_search: true)
 ```json
-{{"action_type": "PLAN_APPROVAL", "research_plan": {{...gaps and proposed searches...}}}}
+{{
+  "action_type": "PLAN_APPROVAL",
+  "research_plan": {{
+    "db_results": {{"count": 2, "topics": ["MCP basics"]}},
+    "coverage_gaps": ["MCP UI tutorials", "practical examples"],
+    "proposed_searches": [
+      {{"query": "MCP UI tutorial intermediate", "rationale": "Need UI-specific content"}}
+    ]
+  }},
+  "reasoning": "Database has limited content. Need web search for comprehensive MCP UI resources."
+}}
 ```
 
-**After user approves:** Dashboard executes web searches and re-runs agent with SKIP_WEB_SEARCH_APPROVAL=true
+[User approves → System re-runs with SKIP_WEB_SEARCH_APPROVAL=true]
 
-**Iteration 3 (after approval):** Check environment - SKIP_WEB_SEARCH_APPROVAL is true, so call web-search directly
+**Iteration 4:** Execute web search
 ```json
 {{
   "action_type": "TOOL_CALL",
   "tool": "web-search",
+  "args": {{"query": "MCP UI Model Context Protocol tutorial intermediate", "max_results": 5}},
+  "reasoning": "SKIP_WEB_SEARCH_APPROVAL is true. Gathering content to synthesize into digest."
+}}
+```
+Result: `{{"results": [...5 articles...], "source_api": "tavily"}}`
+
+**Iteration 5:** Generate digest from all gathered content
+```json
+{{
+  "action_type": "TOOL_CALL",
+  "tool": "generate-digest",
   "args": {{
-    "query": "quantum computing basics tutorial",
-    "max_results": 5
+    "date": "today",
+    "max_insights": 7,
+    "user_context": {{"week": 7, "topics": ["Model Context Protocol", "LLM Tool Calling"], "difficulty": "intermediate"}}
   }},
-  "reasoning": "SKIP_WEB_SEARCH_APPROVAL is set to true, meaning approval was already granted. Calling web-search directly to get additional content."
+  "reasoning": "Have gathered content from database (2 items) and web search (5 items). Now synthesizing into structured learning insights."
+}}
+```
+Result: `{{"insights": [...7 insights...], "ragas_scores": {{"average": 0.80}}, "quality_badge": "✓"}}`
+
+**Iteration 6:** Complete immediately (do NOT retry digest!)
+```json
+{{
+  "action_type": "COMPLETE",
+  "output": {{"digest": {{
+    "insights": [...7 insights...],
+    "ragas_scores": {{"average": 0.80}},
+    "quality_badge": "✓",
+    "sources": [...web sources...],
+    "generated_at": "2025-11-29"
+  }}}},
+  "reasoning": "Digest generated successfully with 7 insights and RAGAS score of 0.80. This is sufficient quality - completing now instead of retrying."
 }}
 ```
 
-**Iteration 4:** Search database content
-**Iteration 5:** Generate digest combining DB and web sources
-**Iteration 6:** Complete with final digest
+**CRITICAL:** Do NOT call generate-digest multiple times trying to improve RAGAS scores. Once you get success=true with insights, COMPLETE immediately.
+
+---
+
+### Scenario 3: User asks "Help me learn MCP" (Q&A mode)
+
+**Iteration 1:** Get user context
+```json
+{{"action_type": "TOOL_CALL", "tool": "get-user-context", "args": {{"user_id": "current"}}}}
+```
+Result: `{{"week": 7, "topics": ["Model Context Protocol", "LLM Tool Calling"], "difficulty": "intermediate", "user_id": "00000000-0000-0000-0000-000000000001"}}`
+
+**Iteration 2:** Generate focused answer (Q&A mode, not full digest)
+```json
+{{
+  "action_type": "TOOL_CALL",
+  "tool": "generate-digest",
+  "args": {{
+    "max_insights": 3,
+    "explicit_query": "What is Model Context Protocol and how do I use it?",
+    "user_context": {{
+      "week": 7,
+      "topics": ["Model Context Protocol", "LLM Tool Calling"],
+      "difficulty": "intermediate",
+      "user_id": "00000000-0000-0000-0000-000000000001"
+    }},
+    "force_refresh": true
+  }},
+  "reasoning": "User wants to learn about MCP specifically. Using Q&A mode with explicit_query for focused retrieval and only 3 insights (not 7) for targeted answer."
+}}
+```
+Result: `{{"success": true, "insights": [...3 MCP-focused insights...], "num_insights": 3, "ragas_scores": {{"average": 0.82}}, "quality_badge": "✓"}}`
+
+**Iteration 3:** Complete immediately (do NOT retry!)
+```json
+{{
+  "action_type": "COMPLETE",
+  "output": {{
+    "answer": {{
+      "insights": [...3 insights...],
+      "topic": "Model Context Protocol",
+      "num_insights": 3,
+      "ragas_scores": {{"average": 0.82}},
+      "quality_badge": "✓"
+    }}
+  }},
+  "reasoning": "Successfully generated focused answer with success=true, 3 insights, and RAGAS score of 0.82. This is sufficient - completing now."
+}}
+```
+
+**CRITICAL:** Once generate-digest returns success=true, COMPLETE immediately. Do NOT call it again.
 
 ## Remember
 

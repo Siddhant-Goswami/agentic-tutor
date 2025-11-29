@@ -122,23 +122,37 @@ class ToolRegistry:
         """Schema for generate-digest tool."""
         return {
             "name": "generate-digest",
-            "description": "Generate a complete personalized learning digest with insights, quiz, and quality scores",
+            "description": "Generate personalized learning digest using RAG pipeline. Retrieves relevant content via semantic search, synthesizes insights with Claude, and validates quality with RAGAS. Use for both daily digests (7 insights) and answering learning questions (3 insights with explicit_query).",
             "input_schema": {
                 "date": "string (ISO date or 'today', default: 'today')",
-                "max_insights": "integer (3-10, default: 7)",
-                "force_refresh": "boolean (skip cache, default: false)",
+                "max_insights": "integer (2-10, default: 7 for digest, 3 for Q&A)",
+                "force_refresh": "boolean (skip cache, default: true)",
+                "user_context": "object (REQUIRED: user's learning context from get-user-context, must include user_id)",
+                "explicit_query": "string (optional: for Q&A mode, e.g. 'What is MCP and how to use it?')",
             },
             "output_schema": {
-                "insights": "array of insight objects",
-                "sources": "array of source objects",
-                "quiz": "array of quiz questions",
-                "ragas_scores": "object with quality metrics",
+                "success": "boolean (true if insights generated successfully)",
+                "insights": "array of insight objects with title, explanation, practical_takeaway, source",
+                "ragas_scores": "object with faithfulness, context_precision, context_recall, average",
+                "quality_badge": "string (✨ high / ✓ good / ⚠️ low)",
+                "metadata": "object with query, learning_context, sources, etc.",
+                "num_insights": "integer (count of insights generated)",
+                "error": "string (only present if success=false)",
             },
             "example": {
-                "input": {"date": "today", "max_insights": 5},
+                "input": {
+                    "date": "today",
+                    "max_insights": 5,
+                    "user_context": {
+                        "week": 7,
+                        "topics": ["Transformers", "Attention"],
+                        "difficulty": "intermediate",
+                    },
+                },
                 "output": {
-                    "insights": [{"title": "...", "content": "...", "source": "..."}],
-                    "ragas_scores": {"average": 0.85},
+                    "insights": [{"title": "...", "explanation": "...", "source": {...}}],
+                    "ragas_scores": {"average": 0.85, "faithfulness": 0.88},
+                    "quality_badge": "✨",
                 },
             },
         }
@@ -402,49 +416,131 @@ class ToolRegistry:
             return {"results": [], "count": 0, "error": str(e)}
 
     async def _execute_generate_digest(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute generate-digest tool."""
-        from utils.db import get_supabase_client
+        """
+        Execute generate-digest tool using proper RAG pipeline.
 
-        max_insights = args.get("max_insights", 5)
+        Uses subprocess to call DigestGenerator to avoid import issues.
+        """
+        from datetime import datetime, date
+        import sys
+        import json
+        import asyncio
+        from pathlib import Path
 
-        # Simplified digest generation using direct DB access
-        db = get_supabase_client(self.supabase_url, self.supabase_key)
+        # Parse arguments
+        date_str = args.get("date", "today")
+        if date_str == "today":
+            digest_date = date.today()
+        else:
+            try:
+                digest_date = datetime.fromisoformat(date_str).date()
+            except ValueError:
+                digest_date = date.today()
+
+        max_insights = args.get("max_insights", 7)
+        force_refresh = args.get("force_refresh", True)
+        user_context = args.get("user_context", {})
+        explicit_query = args.get("explicit_query")
+
+        # Get user_id from context
+        user_id = user_context.get("user_id", "00000000-0000-0000-0000-000000000001")
 
         try:
-            # Get recent content
-            content_result = (
-                db.table("content")
-                .select("title, author, url, published_at")
-                .order("published_at", desc=True)
-                .limit(max_insights)
-                .execute()
+            # Create a Python script to run in subprocess
+            project_root = Path(__file__).parent.parent
+            script = f"""
+import sys
+import asyncio
+import json
+from datetime import date
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(r'{project_root}') / 'learning-coach-mcp' / 'src'))
+
+from rag.digest_generator import DigestGenerator
+
+async def run():
+    generator = DigestGenerator(
+        supabase_url=r'{self.supabase_url}',
+        supabase_key=r'{self.supabase_key}',
+        openai_api_key=r'{self.openai_api_key}',
+        anthropic_api_key=r'{self.anthropic_api_key}',
+        ragas_min_score=0.70,
+    )
+
+    result = await generator.generate(
+        user_id=r'{user_id}',
+        date=date.fromisoformat('{digest_date.isoformat()}'),
+        max_insights={max_insights},
+        force_refresh={force_refresh},
+        explicit_query={json.dumps(explicit_query)},
+    )
+
+    print(json.dumps(result, default=str))
+
+asyncio.run(run())
+"""
+
+            # Run in subprocess
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, '-c', script,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
 
-            # Format as insights
-            insights = []
-            for item in content_result.data:
-                insights.append({
-                    "title": item.get("title", "Untitled"),
-                    "content": f"Article by {item.get('author', 'Unknown')}. Published: {item.get('published_at', 'Unknown')}",
-                    "source": {
-                        "url": item.get("url", ""),
-                        "published_at": item.get("published_at")
-                    }
-                })
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
 
+            if proc.returncode != 0:
+                error_msg = stderr.decode()
+                logger.error(f"Digest generation subprocess failed: {error_msg}")
+                return {
+                    "success": False,
+                    "insights": [],
+                    "error": f"Subprocess error: {error_msg[:200]}",
+                    "ragas_scores": {},
+                    "num_insights": 0
+                }
+
+            # Parse result
+            result = json.loads(stdout.decode())
+
+            # Ensure proper format for agent with success indicator
+            if result.get("insights"):
+                return {
+                    "success": True,
+                    "insights": result["insights"],
+                    "ragas_scores": result.get("ragas_scores", {}),
+                    "quality_badge": result.get("quality_badge", "✓"),
+                    "metadata": result.get("metadata", {}),
+                    "num_insights": len(result["insights"])
+                }
+            else:
+                return {
+                    "success": False,
+                    "insights": [],
+                    "error": result.get("metadata", {}).get("error", "No insights generated"),
+                    "ragas_scores": {},
+                    "num_insights": 0
+                }
+
+        except asyncio.TimeoutError:
+            logger.error("Digest generation timed out after 120s")
             return {
-                "insights": insights,
-                "sources": [i["source"] for i in insights],
-                "ragas_scores": {"average": 0.85},
-                "message": f"Generated {len(insights)} insights"
+                "success": False,
+                "insights": [],
+                "error": "Generation timed out after 120 seconds",
+                "ragas_scores": {},
+                "num_insights": 0
             }
-
         except Exception as e:
-            logger.error(f"Error generating digest: {e}")
+            logger.error(f"Error generating digest: {e}", exc_info=True)
             return {
+                "success": False,
                 "insights": [],
                 "error": str(e),
-                "message": "Failed to generate digest"
+                "ragas_scores": {},
+                "num_insights": 0
             }
 
     async def _execute_search_past_insights(self, args: Dict[str, Any]) -> Dict[str, Any]:

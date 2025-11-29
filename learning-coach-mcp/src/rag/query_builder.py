@@ -112,67 +112,35 @@ class QueryBuilder:
         Returns:
             Query text string
         """
-        # If user provided explicit query, enhance it with context
+        # If user provided explicit query, use it directly for Q&A mode
         if explicit_query:
+            # For Q&A mode: keep query focused and question-based
             query_parts = [explicit_query]
 
-            # Add context hints
-            if context.get("current_topics"):
-                topics_str = ", ".join(context["current_topics"][:3])
-                query_parts.append(
-                    f"Related to my current learning topics: {topics_str}."
-                )
-
+            # Add minimal context hints for relevance
             if context.get("difficulty_level"):
                 level = context["difficulty_level"]
-                query_parts.append(
-                    f"I'm at {level} level, so provide {level}-appropriate depth."
-                )
+                query_parts.append(f"Explain at {level} level.")
 
             return " ".join(query_parts)
 
-        # Otherwise, construct query from context
+        # Otherwise, construct broader query for digest mode
         query_parts = []
 
-        # Week and bootcamp info
+        # Week and topics (concise)
         if context.get("current_week"):
-            query_parts.append(
-                f"I am in Week {context['current_week']} of an AI bootcamp."
-            )
+            query_parts.append(f"Week {context['current_week']} of AI bootcamp.")
 
-        # Topics
         if context.get("current_topics"):
             topics = context["current_topics"]
-            if len(topics) == 1:
-                query_parts.append(f"I am learning about {topics[0]}.")
-            else:
-                topics_str = ", ".join(topics[:-1]) + f", and {topics[-1]}"
-                query_parts.append(f"I am learning about {topics_str}.")
+            topics_str = ", ".join(topics)
+            query_parts.append(f"Learning: {topics_str}.")
 
-        # Difficulty level
+        # Difficulty and request
         difficulty = context.get("difficulty_level", "intermediate")
-        if difficulty == "beginner":
-            query_parts.append(
-                "I am a beginner, so I need foundational explanations with examples."
-            )
-        elif difficulty == "intermediate":
-            query_parts.append(
-                "I have intermediate knowledge, so I need practical implementation details."
-            )
-        elif difficulty == "advanced":
-            query_parts.append(
-                "I have advanced knowledge, so I need deep technical insights and edge cases."
-            )
-
-        # Learning goals
-        if context.get("learning_goals"):
-            query_parts.append(f"My goal is to: {context['learning_goals']}.")
-
-        # Request type
         query_parts.append(
-            "Find recent articles that explain these topics with practical examples, "
-            "implementation details, and real-world applications. "
-            "Prefer technical depth over high-level overviews."
+            f"Provide {difficulty}-level explanations with practical examples "
+            f"and implementation details."
         )
 
         query_text = " ".join(query_parts)
