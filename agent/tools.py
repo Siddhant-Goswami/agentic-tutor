@@ -417,15 +417,22 @@ class ToolRegistry:
 
     async def _execute_generate_digest(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute generate-digest tool using proper RAG pipeline.
+        Execute generate-digest tool using enhanced digest_api.py.
 
-        Uses subprocess to call DigestGenerator to avoid import issues.
+        Uses semantic search via RPC calls and OpenAI for synthesis.
+        Avoids import issues by using standalone API wrapper.
         """
         from datetime import datetime, date
         import sys
-        import json
-        import asyncio
         from pathlib import Path
+
+        # Import digest_api from dashboard
+        project_root = Path(__file__).parent.parent
+        dashboard_path = project_root / "dashboard"
+        if str(dashboard_path) not in sys.path:
+            sys.path.insert(0, str(dashboard_path))
+
+        from digest_api import generate_digest_simple
 
         # Parse arguments
         date_str = args.get("date", "today")
@@ -446,93 +453,24 @@ class ToolRegistry:
         user_id = user_context.get("user_id", "00000000-0000-0000-0000-000000000001")
 
         try:
-            # Create a Python script to run in subprocess
-            project_root = Path(__file__).parent.parent
-            script = f"""
-import sys
-import asyncio
-import json
-from datetime import date
-from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(r'{project_root}') / 'learning-coach-mcp' / 'src'))
-
-from rag.digest_generator import DigestGenerator
-
-async def run():
-    generator = DigestGenerator(
-        supabase_url=r'{self.supabase_url}',
-        supabase_key=r'{self.supabase_key}',
-        openai_api_key=r'{self.openai_api_key}',
-        anthropic_api_key=r'{self.anthropic_api_key}',
-        ragas_min_score=0.70,
-    )
-
-    result = await generator.generate(
-        user_id=r'{user_id}',
-        date=date.fromisoformat('{digest_date.isoformat()}'),
-        max_insights={max_insights},
-        force_refresh={force_refresh},
-        explicit_query={json.dumps(explicit_query)},
-    )
-
-    print(json.dumps(result, default=str))
-
-asyncio.run(run())
-"""
-
-            # Run in subprocess
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, '-c', script,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            # Call enhanced digest API
+            result = await generate_digest_simple(
+                user_id=user_id,
+                date_obj=digest_date,
+                max_insights=max_insights,
+                force_refresh=force_refresh,
+                explicit_query=explicit_query,
             )
 
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            # Ensure proper format with success indicator
+            # The enhanced API already returns success, but ensure it's present
+            if "success" not in result:
+                # Legacy format - add success based on insights
+                result["success"] = bool(result.get("insights") and len(result.get("insights", [])) > 0)
+                result["num_insights"] = len(result.get("insights", []))
 
-            if proc.returncode != 0:
-                error_msg = stderr.decode()
-                logger.error(f"Digest generation subprocess failed: {error_msg}")
-                return {
-                    "success": False,
-                    "insights": [],
-                    "error": f"Subprocess error: {error_msg[:200]}",
-                    "ragas_scores": {},
-                    "num_insights": 0
-                }
+            return result
 
-            # Parse result
-            result = json.loads(stdout.decode())
-
-            # Ensure proper format for agent with success indicator
-            if result.get("insights"):
-                return {
-                    "success": True,
-                    "insights": result["insights"],
-                    "ragas_scores": result.get("ragas_scores", {}),
-                    "quality_badge": result.get("quality_badge", "✓"),
-                    "metadata": result.get("metadata", {}),
-                    "num_insights": len(result["insights"])
-                }
-            else:
-                return {
-                    "success": False,
-                    "insights": [],
-                    "error": result.get("metadata", {}).get("error", "No insights generated"),
-                    "ragas_scores": {},
-                    "num_insights": 0
-                }
-
-        except asyncio.TimeoutError:
-            logger.error("Digest generation timed out after 120s")
-            return {
-                "success": False,
-                "insights": [],
-                "error": "Generation timed out after 120 seconds",
-                "ragas_scores": {},
-                "num_insights": 0
-            }
         except Exception as e:
             logger.error(f"Error generating digest: {e}", exc_info=True)
             return {
