@@ -53,6 +53,8 @@ class ToolRegistry:
             "generate-digest": self._generate_digest_schema(),
             "search-past-insights": self._search_past_insights_schema(),
             "sync-progress": self._sync_progress_schema(),
+            "web-search": self._web_search_schema(),
+            "analyze-content-coverage": self._analyze_content_coverage_schema(),
         }
 
     # ========================================================================
@@ -179,6 +181,97 @@ class ToolRegistry:
             },
         }
 
+    def _web_search_schema(self) -> Dict[str, Any]:
+        """Schema for web-search tool."""
+        return {
+            "name": "web-search",
+            "description": "Search the web for educational content when database doesn't have sufficient information. Returns results with full citations. NOTE: Web results are not from curated sources and should be clearly marked.",
+            "input_schema": {
+                "query": "string (search query)",
+                "max_results": "integer (1-10, default: 5)",
+                "search_depth": "string ('basic' or 'advanced', default: 'basic')",
+                "include_domains": "array of strings (optional, MUST be full domains like ['wikipedia.org', 'github.com'], NOT TLDs like ['edu', 'org'])",
+            },
+            "output_schema": {
+                "results": "array of objects with title, content, url, published_date, score",
+                "source_api": "string (which API was used: 'tavily' or 'fallback')",
+                "citations": "array of citation objects",
+                "search_metadata": "object with query and timestamp"
+            },
+            "requires_approval": True,
+            "example": {
+                "input": {
+                    "query": "transformer architecture attention mechanism tutorials",
+                    "max_results": 5
+                },
+                "output": {
+                    "results": [
+                        {
+                            "title": "The Illustrated Transformer",
+                            "content": "Visual explanation of transformer architecture...",
+                            "url": "https://jalammar.github.io/illustrated-transformer/",
+                            "score": 0.95,
+                            "source_type": "web_search"
+                        }
+                    ],
+                    "source_api": "tavily",
+                    "citations": [
+                        {
+                            "title": "The Illustrated Transformer",
+                            "url": "https://jalammar.github.io/illustrated-transformer/",
+                            "author": "Jay Alammar"
+                        }
+                    ]
+                }
+            }
+        }
+
+    def _analyze_content_coverage_schema(self) -> Dict[str, Any]:
+        """Schema for analyze-content-coverage tool."""
+        return {
+            "name": "analyze-content-coverage",
+            "description": "Analyze existing database content to identify what we have and what's missing for a given query. Determines if web search is needed.",
+            "input_schema": {
+                "query": "string (user's learning query)",
+                "user_id": "string (UUID)",
+                "user_context": "object (optional user learning context)"
+            },
+            "output_schema": {
+                "db_results_count": "integer",
+                "topics_covered": "array of strings",
+                "coverage_gaps": "array of gap objects",
+                "existing_sources": "array of source objects",
+                "needs_web_search": "boolean",
+                "confidence_score": "float (0.0 to 1.0)"
+            },
+            "example": {
+                "input": {
+                    "query": "quantum computing basics",
+                    "user_id": "00000000-0000-0000-0000-000000000001"
+                },
+                "output": {
+                    "db_results_count": 1,
+                    "topics_covered": ["quantum", "computing"],
+                    "coverage_gaps": [
+                        {
+                            "topic": "quantum gates",
+                            "reason": "No content on quantum gates found",
+                            "priority": "high",
+                            "suggested_query": "quantum gates tutorial"
+                        }
+                    ],
+                    "existing_sources": [
+                        {
+                            "title": "Introduction to Quantum Computing",
+                            "url": "https://example.com/quantum"
+                        }
+                    ],
+                    "needs_web_search": True,
+                    "confidence_score": 0.4
+                }
+            }
+        }
+
     # ========================================================================
     # TOOL EXECUTION
     # ========================================================================
@@ -214,6 +307,10 @@ class ToolRegistry:
                 return await self._execute_search_past_insights(args)
             elif tool_name == "sync-progress":
                 return await self._execute_sync_progress(args)
+            elif tool_name == "web-search":
+                return await self._execute_web_search(args)
+            elif tool_name == "analyze-content-coverage":
+                return await self._execute_analyze_content_coverage(args)
             else:
                 raise ValueError(f"Tool {tool_name} not implemented")
 
@@ -429,6 +526,156 @@ class ToolRegistry:
                 "current_week": None,
                 "current_topics": [],
                 "message": f"Error: {str(e)}"
+            }
+
+    async def _execute_web_search(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute web-search tool using Tavily API."""
+        import os
+        from datetime import datetime
+
+        query = args.get("query", "")
+        max_results = args.get("max_results", 5)
+        search_depth = args.get("search_depth", "basic")
+        include_domains = args.get("include_domains", [])
+
+        if not query:
+            return {"results": [], "error": "Query cannot be empty"}
+
+        # Get Tavily API key from environment
+        tavily_api_key = os.getenv("TAVILY_API_KEY")
+
+        if not tavily_api_key:
+            return {
+                "results": [],
+                "error": "TAVILY_API_KEY not found in environment. Please add it to your .env file.",
+                "message": "Web search disabled: API key missing"
+            }
+
+        try:
+            from tavily import TavilyClient
+
+            # Initialize Tavily client
+            client = TavilyClient(api_key=tavily_api_key)
+
+            # Perform search
+            search_params = {
+                "query": query,
+                "max_results": max_results,
+                "search_depth": search_depth,
+            }
+
+            # Add domain filtering if specified
+            if include_domains:
+                search_params["include_domains"] = include_domains
+
+            logger.info(f"Performing web search with Tavily: {query}")
+            response = client.search(**search_params)
+
+            # Extract and format results
+            results = []
+            citations = []
+
+            for item in response.get("results", []):
+                result_obj = {
+                    "title": item.get("title", "Untitled"),
+                    "content": item.get("content", ""),
+                    "url": item.get("url", ""),
+                    "score": item.get("score", 0.0),
+                    "published_date": item.get("published_date", ""),
+                    "source_type": "web_search"  # Mark as web search
+                }
+                results.append(result_obj)
+
+                # Create citation
+                citations.append({
+                    "title": item.get("title", "Untitled"),
+                    "url": item.get("url", ""),
+                    "published_date": item.get("published_date", "")
+                })
+
+            return {
+                "results": results,
+                "count": len(results),
+                "source_api": "tavily",
+                "citations": citations,
+                "search_metadata": {
+                    "query": query,
+                    "searched_at": datetime.now().isoformat(),
+                    "search_depth": search_depth,
+                    "max_results": max_results
+                },
+                "message": f"Found {len(results)} results from web search"
+            }
+
+        except ImportError:
+            logger.error("Tavily package not installed")
+            return {
+                "results": [],
+                "error": "tavily-python package not installed. Run: pip install tavily-python"
+            }
+
+        except Exception as e:
+            logger.error(f"Error performing web search: {e}", exc_info=True)
+            return {
+                "results": [],
+                "count": 0,
+                "error": str(e),
+                "message": "Web search failed"
+            }
+
+    async def _execute_analyze_content_coverage(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute analyze-content-coverage tool using ResearchPlanner."""
+        from .research_planner import ResearchPlanner
+
+        query = args.get("query", "")
+        user_id = args.get("user_id", "00000000-0000-0000-0000-000000000001")
+        user_context = args.get("user_context")
+
+        if not query:
+            return {"error": "Query cannot be empty"}
+
+        try:
+            # Initialize research planner
+            planner = ResearchPlanner(
+                supabase_url=self.supabase_url,
+                supabase_key=self.supabase_key,
+                openai_api_key=self.openai_api_key,
+                min_db_results_threshold=3
+            )
+
+            # Analyze content coverage
+            analysis = await planner.analyze_content_coverage(
+                query=query,
+                user_id=user_id,
+                user_context=user_context
+            )
+
+            # Convert dataclass to dict
+            return {
+                "db_results_count": analysis.db_results_count,
+                "topics_covered": analysis.topics_covered,
+                "coverage_gaps": [
+                    {
+                        "topic": gap.topic,
+                        "reason": gap.reason,
+                        "priority": gap.priority,
+                        "suggested_query": gap.suggested_query
+                    }
+                    for gap in analysis.coverage_gaps
+                ],
+                "existing_sources": analysis.existing_sources,
+                "needs_web_search": analysis.needs_web_search,
+                "confidence_score": analysis.confidence_score,
+                "message": f"Analyzed coverage: {analysis.db_results_count} DB results, "
+                           f"{len(analysis.coverage_gaps)} gaps identified"
+            }
+
+        except Exception as e:
+            logger.error(f"Error analyzing content coverage: {e}", exc_info=True)
+            return {
+                "error": str(e),
+                "db_results_count": 0,
+                "needs_web_search": True
             }
 
     # ========================================================================

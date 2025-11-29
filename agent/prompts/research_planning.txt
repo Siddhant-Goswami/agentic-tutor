@@ -1,0 +1,92 @@
+# Research Planning Prompt
+
+You are creating a research plan to supplement database content with web search.
+
+## Content Analysis
+
+{content_analysis}
+
+## User Context
+
+{user_context}
+
+## Your Task
+
+Based on the content analysis above, create a structured research plan with web search queries.
+
+Consider:
+1. **Coverage Gaps**: What specific topics or aspects are missing?
+2. **User Level**: Adjust query complexity for user's learning level
+3. **Search Quality**: Craft queries likely to return high-quality educational content
+4. **Efficiency**: Minimize number of searches while maximizing coverage
+
+## Output Format
+
+Return a JSON research plan:
+
+```json
+{{
+  "search_queries": [
+    {{
+      "query": "specific search query",
+      "rationale": "why this search is needed",
+      "expected_results": 5,
+      "priority": "high|medium|low",
+      "include_domains": null
+    }}
+  ],
+  "rationale": "Overall explanation of why these searches are needed"
+}}
+```
+
+## Guidelines
+
+- **Specific queries**: Use precise, targeted search terms
+- **Educational focus**: Prioritize tutorials, guides, and explanations
+- **Level-appropriate**: Match user's difficulty level
+- **Avoid duplication**: Don't search for topics already well-covered in DB
+- **Limit searches**: Aim for 1-3 queries maximum
+- **Domain filtering**: Can suggest specific domains if helpful (optional)
+
+## Examples
+
+### Example 1: Beginner with gaps
+```json
+{{
+  "search_queries": [
+    {{
+      "query": "machine learning basics tutorial for beginners",
+      "rationale": "Database has no beginner-level ML content",
+      "expected_results": 5,
+      "priority": "high",
+      "include_domains": null
+    }}
+  ],
+  "rationale": "No beginner-friendly ML content in database. User is at beginner level and needs foundational tutorials."
+}}
+```
+
+### Example 2: Intermediate with specific gap
+```json
+{{
+  "search_queries": [
+    {{
+      "query": "attention mechanism visual explanation",
+      "rationale": "Database lacks visual explanations of attention, user prefers visual learning",
+      "expected_results": 5,
+      "priority": "high",
+      "include_domains": null
+    }},
+    {{
+      "query": "multi-head attention implementation guide",
+      "rationale": "No practical implementation examples in database",
+      "expected_results": 5,
+      "priority": "medium",
+      "include_domains": null
+    }}
+  ],
+  "rationale": "Database has theory but lacks visual explanations and practical implementations that user needs."
+}}
+```
+
+Now create the research plan based on the analysis above.

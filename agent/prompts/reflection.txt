@@ -55,6 +55,13 @@ When evaluating quality, consider:
 - Does the quiz test the right concepts?
 - Is the quality score (RAGAS) acceptable?
 
+**For Web Search Results**:
+- Does each result have a complete citation with URL?
+- Are web search results clearly marked as source_type: "web_search"?
+- Is the content relevant and high-quality despite being from web?
+- Are the results appropriate for the user's learning level?
+- Should we search again with refined criteria for better results?
+
 **For Past Insights**:
 - Are the retrieved insights relevant to the query?
 - Do they provide useful context or information?

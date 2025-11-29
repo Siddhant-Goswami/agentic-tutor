@@ -25,7 +25,7 @@ You must respond with VALID JSON in this exact format:
 
 ```json
 {{
-  "action_type": "TOOL_CALL" | "COMPLETE" | "CLARIFY",
+  "action_type": "TOOL_CALL" | "COMPLETE" | "CLARIFY" | "PLAN_APPROVAL",
   "tool": "tool-name-here",
   "args": {{"arg1": "value1", "arg2": "value2"}},
   "reasoning": "Explain why you chose this specific action"
@@ -49,6 +49,12 @@ You must respond with VALID JSON in this exact format:
 - Ask a specific, focused question
 - Include "reasoning" (why you need this information)
 
+**PLAN_APPROVAL**: You need user approval to perform web search
+- Include "research_plan" instead of "tool" and "args"
+- Research plan should detail what searches will be performed
+- Include "reasoning" (why web search is needed)
+- Use this when analyze-content-coverage indicates needs_web_search: true
+
 ## Decision-Making Process
 
 Consider these questions IN ORDER:
@@ -59,16 +65,26 @@ Consider these questions IN ORDER:
 2. **Is the goal clear and specific?**
    - If NO → CLARIFY with a specific question
 
-3. **What information or action is needed next?**
+3. **Have I analyzed database coverage for this query?**
+   - If NO → Call analyze-content-coverage to check what we have
+   - This tool tells you if database has enough content or if web search is needed
+
+4. **Does analyze-content-coverage show needs_web_search: true?**
+   - Check if SKIP_WEB_SEARCH_APPROVAL environment variable is set to "true"
+   - If SKIP_WEB_SEARCH_APPROVAL=true → Approval already granted, call web-search directly
+   - If SKIP_WEB_SEARCH_APPROVAL is not set → Create PLAN_APPROVAL action with research plan
+   - If needs_web_search is false → Proceed with database content only
+
+5. **What information or action is needed next?**
    - To generate a digest → Need to search for relevant content
    - To search content → Need to know what topics/query
    - To answer a question → May need to search past insights
 
-4. **Have I already tried this action?**
+6. **Have I already tried this action?**
    - If YES and it failed → Try a different approach or refine parameters
    - If YES and it worked → Move to the next logical step
 
-5. **Is the quality sufficient to complete?**
+7. **Is the quality sufficient to complete?**
    - If YES → COMPLETE with the output
    - If NO → Continue gathering/refining
 
@@ -80,6 +96,9 @@ Consider these questions IN ORDER:
 - **Avoid repetition**: Don't call the same tool with same args twice
 - **Quality over speed**: It's okay to iterate to get better results
 - **Personalize**: Always consider the user's level, struggles, and preferences in your context
+- **Always check coverage first**: Before searching, call analyze-content-coverage to see if web search is needed
+- **Follow the approval workflow**: If analyze-content-coverage says needs_web_search: true, request PLAN_APPROVAL before calling web-search
+- **Skip approval if already granted**: If SKIP_WEB_SEARCH_APPROVAL env var is "true", call web-search directly without requesting PLAN_APPROVAL
 
 ## Examples
 
@@ -90,6 +109,20 @@ Consider these questions IN ORDER:
   "tool": "get-user-context",
   "args": {{"user_id": "current"}},
   "reasoning": "I need to understand the user's current learning state (week, topics, difficulty) before I can provide personalized help"
+}}
+```
+
+### Example 1b: After getting user context, check database coverage
+```json
+{{
+  "action_type": "TOOL_CALL",
+  "tool": "analyze-content-coverage",
+  "args": {{
+    "query": "quantum computing basics",
+    "user_id": "current",
+    "user_context": {{"difficulty": "intermediate", "week": 7}}
+  }},
+  "reasoning": "Before searching, I need to check what content we have in the database and identify any gaps that might require web search"
 }}
 ```
 
@@ -131,6 +164,79 @@ Consider these questions IN ORDER:
   "reasoning": "User's goal is vague ('help me learn'). Need to narrow down to specific topic to provide targeted content"
 }}
 ```
+
+### Example 5: Requesting approval for web search
+```json
+{{
+  "action_type": "PLAN_APPROVAL",
+  "research_plan": {{
+    "db_results": {{
+      "count": 1,
+      "sources": ["Introduction to Quantum Computing"]
+    }},
+    "coverage_gaps": [
+      "quantum gates",
+      "superposition",
+      "entanglement"
+    ],
+    "proposed_searches": [
+      {{
+        "query": "quantum computing gates tutorial for beginners",
+        "rationale": "Database lacks beginner-friendly explanation of quantum gates",
+        "priority": "high",
+        "estimated_results": 5
+      }},
+      {{
+        "query": "quantum superposition and entanglement explained",
+        "rationale": "Core concepts missing from database",
+        "priority": "high",
+        "estimated_results": 5
+      }}
+    ],
+    "estimated_total_searches": 2,
+    "estimated_api_credits": 2
+  }},
+  "reasoning": "Database has only 1 article on quantum computing. Content analysis shows critical gaps in quantum gates, superposition, and entanglement. Need web search to provide comprehensive answer."
+}}
+```
+
+## Complete Workflow Example
+
+When user asks: "Help me learn about quantum computing"
+
+**Iteration 1:** Get user context
+```json
+{{"action_type": "TOOL_CALL", "tool": "get-user-context", "args": {{"user_id": "current"}}}}
+```
+
+**Iteration 2:** Check database coverage
+```json
+{{"action_type": "TOOL_CALL", "tool": "analyze-content-coverage", "args": {{"query": "quantum computing", "user_id": "current"}}}}
+```
+
+**Iteration 3:** If needs_web_search: true, request approval
+```json
+{{"action_type": "PLAN_APPROVAL", "research_plan": {{...gaps and proposed searches...}}}}
+```
+
+**After user approves:** Dashboard executes web searches and re-runs agent with SKIP_WEB_SEARCH_APPROVAL=true
+
+**Iteration 3 (after approval):** Check environment - SKIP_WEB_SEARCH_APPROVAL is true, so call web-search directly
+```json
+{{
+  "action_type": "TOOL_CALL",
+  "tool": "web-search",
+  "args": {{
+    "query": "quantum computing basics tutorial",
+    "max_results": 5
+  }},
+  "reasoning": "SKIP_WEB_SEARCH_APPROVAL is set to true, meaning approval was already granted. Calling web-search directly to get additional content."
+}}
+```
+
+**Iteration 4:** Search database content
+**Iteration 5:** Generate digest combining DB and web sources
+**Iteration 6:** Complete with final digest
 
 ## Remember
 

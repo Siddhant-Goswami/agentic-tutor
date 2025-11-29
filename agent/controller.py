@@ -7,6 +7,7 @@ Main autonomous agent loop implementing SENSE → PLAN → ACT → OBSERVE → R
 import logging
 import json
 import uuid
+import os
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from pathlib import Path
@@ -152,6 +153,34 @@ class AgentController:
                         logs=self.logger.get_logs(session_id),
                         iteration_count=iteration,
                         status="needs_clarification",
+                        session_id=str(session_id),
+                    )
+
+                # Check if we need plan approval for web search
+                if plan.get("action_type") == "PLAN_APPROVAL":
+                    research_plan = plan.get("research_plan", {})
+                    self.logger.log(
+                        session_id,
+                        "PLAN_APPROVAL",
+                        {
+                            "research_plan": research_plan,
+                            "reasoning": plan.get("reasoning", "")
+                        },
+                        iteration,
+                    )
+                    self.logger.complete_session(
+                        session_id, "needs_approval", {"research_plan": research_plan}
+                    )
+
+                    return AgentResult(
+                        output={
+                            "research_plan": research_plan,
+                            "type": "plan_approval_needed",
+                            "message": "Web search requires your approval"
+                        },
+                        logs=self.logger.get_logs(session_id),
+                        iteration_count=iteration,
+                        status="needs_approval",
                         session_id=str(session_id),
                     )
 
@@ -304,12 +333,16 @@ class AgentController:
             )
         iteration_history_str = "\n".join(iteration_history) if iteration_history else "No previous iterations"
 
+        # Add environment info (for web search approval workflow)
+        skip_approval = os.getenv("SKIP_WEB_SEARCH_APPROVAL", "false")
+        env_info = f"\n\n## Environment Variables\n\nSKIP_WEB_SEARCH_APPROVAL = {skip_approval}"
+
         planning_prompt = self.planning_prompt_template.format(
             goal=goal,
             context=json.dumps(context.get("user_context", {}), indent=2),
             iteration_history=iteration_history_str,
             tool_schemas=tool_schemas,
-        )
+        ) + env_info
 
         try:
             # Call LLM for planning

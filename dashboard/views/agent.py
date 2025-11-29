@@ -77,6 +77,16 @@ def show():
 
     st.markdown("---")
 
+    # Workflow status indicator
+    if 'digest_generation_in_progress' in st.session_state and st.session_state['digest_generation_in_progress']:
+        st.info("⏳ **Workflow Status:** Generating digest with web search results...")
+    elif 'digest_completed' in st.session_state and st.session_state['digest_completed']:
+        st.success("✅ **Workflow Status:** Digest completed! Scroll down to view results.")
+    elif 'last_agent_result' in st.session_state:
+        result_status = st.session_state['last_agent_result'].get('status', '')
+        if result_status == 'needs_approval':
+            st.warning("⏸️ **Workflow Status:** Waiting for web search approval...")
+
     # Execute agent when button is clicked
     if run_button and goal:
         # Set max iterations via environment
@@ -86,8 +96,24 @@ def show():
             # Run agent
             result = run_agent_async(goal, st.session_state.user_id)
 
-        # Display results
+        # Store result in session state for approval workflow
         if result:
+            st.session_state['last_agent_result'] = result
+            st.session_state['last_agent_goal'] = goal
+
+    # Check for pending approval from previous run
+    elif 'last_agent_result' in st.session_state:
+        result = st.session_state['last_agent_result']
+        goal = st.session_state.get('last_agent_goal', goal)
+    # Check for completed digest from approval workflow
+    elif 'digest_completed' in st.session_state and st.session_state['digest_completed']:
+        result = st.session_state.get('digest_result')
+        goal = st.session_state.get('last_agent_goal', goal)
+    else:
+        result = None
+
+    # Display results (from current run, pending approval, or completed digest)
+    if result:
             # Status indicator
             status = result.get("status", "unknown")
 
@@ -97,6 +123,8 @@ def show():
                 st.warning("⏱️ Agent reached maximum iterations")
             elif status == "needs_clarification":
                 st.info("❓ Agent needs clarification")
+            elif status == "needs_approval":
+                st.info("🔍 Agent needs approval for web search")
             elif status == "failed":
                 st.error("❌ Agent execution failed")
 
@@ -134,6 +162,104 @@ def show():
                         "💡 _Refine your goal based on this question and run the agent again._"
                     )
 
+                # Check for plan approval needed
+                elif "research_plan" in output and output.get("type") == "plan_approval_needed":
+                    from components.research_planner_ui import render_research_plan_approval
+
+                    research_plan = output.get("research_plan", {})
+                    session_id = result.get("session_id", "")
+
+                    # Store research plan in session state
+                    st.session_state['pending_research_plan'] = research_plan
+                    st.session_state['pending_goal'] = goal
+
+                    # Render approval UI
+                    decision = render_research_plan_approval(research_plan, session_id)
+
+                    if decision == "approved":
+                        st.success("✅ Approved! Executing web searches now...")
+
+                        # Store approval
+                        st.session_state['research_plan_approved'] = True
+
+                        # Execute web searches automatically
+                        with st.spinner("🌐 Executing approved web searches..."):
+                            # Execute each proposed search
+                            all_web_results = []
+                            proposed_searches = research_plan.get("proposed_searches", [])
+
+                            for search in proposed_searches:
+                                search_result = execute_web_search_sync(search.get("query"), search.get("estimated_results", 5))
+                                if search_result and "results" in search_result:
+                                    all_web_results.extend(search_result["results"])
+
+                        if all_web_results:
+                            st.success(f"✅ Found {len(all_web_results)} web results!")
+
+                            # Display web search results
+                            from components.research_planner_ui import render_web_search_results
+                            render_web_search_results(all_web_results, "Approved research queries")
+
+                            # Store for later use
+                            st.session_state['web_search_results'] = all_web_results
+                        else:
+                            st.warning("⚠️ No web results found. Using database content only.")
+
+                        st.markdown("---")
+
+                        # Store that we're now generating digest
+                        st.session_state['digest_generation_in_progress'] = True
+                        st.session_state['approval_session_id'] = session_id
+
+                        # Continue agent to generate digest with web results
+                        st.info("🤖 Continuing agent to generate digest with web search results...")
+
+                        with st.spinner("🤖 Generating digest with combined sources..."):
+                            # Set flag to skip approval on re-run (agent already has web results)
+                            os.environ["SKIP_WEB_SEARCH_APPROVAL"] = "true"
+
+                            # Re-run agent with approval granted
+                            # The agent will now have access to web search results via session/context
+                            continued_result = run_agent_async(
+                                goal=st.session_state.get('last_agent_goal', goal),
+                                user_id=st.session_state.user_id
+                            )
+
+                            # Clear the skip flag
+                            if "SKIP_WEB_SEARCH_APPROVAL" in os.environ:
+                                del os.environ["SKIP_WEB_SEARCH_APPROVAL"]
+
+                        # Store the digest result in session state for persistence
+                        if continued_result:
+                            st.session_state['digest_result'] = continued_result
+                            st.session_state['digest_generation_in_progress'] = False
+                            st.session_state['digest_completed'] = True
+
+                            # Clear the pending approval state
+                            if 'last_agent_result' in st.session_state:
+                                del st.session_state['last_agent_result']
+                            if 'last_agent_goal' in st.session_state:
+                                del st.session_state['last_agent_goal']
+
+                            st.success("✅ Agent completed digest generation!")
+                            st.rerun()  # Rerun to display the digest
+                        else:
+                            st.error("❌ Digest generation failed")
+                            st.session_state['digest_generation_in_progress'] = False
+
+                    elif decision == "denied":
+                        st.warning("❌ Denied. Agent will use database-only results.")
+                        st.session_state['research_plan_approved'] = False
+                        st.info(
+                            "💡 _Run the agent again to get database-only results._"
+                        )
+
+                        # Clear the pending result after handling denial
+                        if 'last_agent_result' in st.session_state:
+                            del st.session_state['last_agent_result']
+                        if 'last_agent_goal' in st.session_state:
+                            del st.session_state['last_agent_goal']
+
                 # Check for digest output
                 elif "digest" in output or "insights" in output:
                     _render_digest_output(output)
@@ -156,8 +282,60 @@ def show():
 
                 render_logs(logs)
 
+            # Clear workflow state button
+            st.markdown("---")
+            if st.button("🔄 Start New Query", key="clear_workflow"):
+                # Clear all workflow state
+                for key in ['last_agent_result', 'last_agent_goal', 'digest_result',
+                           'digest_completed', 'digest_generation_in_progress',
+                           'web_search_results', 'research_plan_approved',
+                           'pending_research_plan', 'pending_goal']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+
     elif run_button and not goal:
         st.warning("⚠️ Please enter a learning goal first")
+
+
+def execute_web_search_sync(query: str, max_results: int = 5) -> dict:
+    """
+    Execute web search synchronously.
+
+    Args:
+        query: Search query
+        max_results: Maximum results to return
+
+    Returns:
+        Search results dictionary
+    """
+    try:
+        from agent.tools import ToolRegistry
+        import asyncio
+
+        # Initialize tool registry
+        tools = ToolRegistry(
+            supabase_url=os.getenv("SUPABASE_URL"),
+            supabase_key=os.getenv("SUPABASE_KEY"),
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        )
+
+        # Run web search
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(
+            tools.execute_tool(
+                "web-search",
+                {"query": query, "max_results": max_results}
+            )
+        )
+        loop.close()
+
+        return result
+
+    except Exception as e:
+        st.error(f"Error executing web search: {e}")
+        return {"error": str(e), "results": []}
 
 
 def run_agent_async(goal: str, user_id: str) -> dict:
@@ -337,22 +515,52 @@ def _render_digest_output(output: dict) -> None:
         st.info(f"**Sources Summary:** {sources_summary}")
         st.markdown("---")
 
-    # Sources
+    # Sources with attribution
     sources = digest.get("sources", [])
 
     if sources:
-        st.markdown(f"#### 📚 Sources ({len(sources)})")
+        # Separate DB and web search sources
+        db_sources = [s for s in sources if s.get("source_type") != "web_search"]
+        web_sources = [s for s in sources if s.get("source_type") == "web_search"]
 
-        for source in sources:
-            url = source.get("url", "#")
-            title = source.get("title", "Untitled")
-            identifier = source.get("identifier", source.get("snippet", "Unknown"))
-            published = source.get("published_at", "")
+        if db_sources and web_sources:
+            # Show both with separation
+            st.markdown(f"#### 📚 From Your Trusted Database ({len(db_sources)})")
 
-            if published:
-                st.markdown(f"- [{title}]({url}) - {identifier} ({published})")
-            else:
-                st.markdown(f"- [{title}]({url}) - {identifier}")
+            for source in db_sources:
+                url = source.get("url", "#")
+                title = source.get("title", "Untitled")
+                st.markdown(f"- 🟢 [{title}]({url})")
+
+            st.markdown("---")
+
+            st.markdown(f"#### 🌐 From Web Search ({len(web_sources)})")
+            st.warning("⚠️ Web search results - not from your curated sources")
+
+            for source in web_sources:
+                url = source.get("url", "#")
+                title = source.get("title", "Untitled")
+                score = source.get("score", "")
+                score_str = f" (Score: {score:.2f})" if score else ""
+                st.markdown(f"- 🔴 [{title}]({url}){score_str}")
+
+        else:
+            # All from one source type
+            st.markdown(f"#### 📚 Sources ({len(sources)})")
+
+            for source in sources:
+                url = source.get("url", "#")
+                title = source.get("title", "Untitled")
+                source_type = source.get("source_type", "database")
+
+                if source_type == "web_search":
+                    badge = "🔴 Web"
+                    score = source.get("score", "")
+                    score_str = f" (Score: {score:.2f})" if score else ""
+                    st.markdown(f"- {badge} [{title}]({url}){score_str}")
+                else:
+                    badge = "🟢 DB"
+                    st.markdown(f"- {badge} [{title}]({url})")
 
     # Full output option
     with st.expander("🔍 View Full Output (JSON)"):
