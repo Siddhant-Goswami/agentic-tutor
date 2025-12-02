@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
 from supabase import Client
 
-from ..utils.db import get_supabase_client
+from utils.db import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,8 @@ class VectorRetriever:
         Returns:
             Chunks sorted by hybrid score
         """
-        now = datetime.now()
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
 
         for chunk in chunks:
             # Similarity score (already 0-1 from cosine similarity)
@@ -193,6 +194,9 @@ class VectorRetriever:
 
             # Recency factor (0-1, higher for newer content)
             published_at = datetime.fromisoformat(chunk["published_at"])
+            # Make published_at timezone-aware if it isn't already
+            if published_at.tzinfo is None:
+                published_at = published_at.replace(tzinfo=timezone.utc)
             days_old = (now - published_at).days
             recency_factor = max(0, 1 - (days_old / 30))  # Decay over 30 days
 

@@ -9,28 +9,37 @@ import logging
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from anthropic import AsyncAnthropic
 
 logger = logging.getLogger(__name__)
 
 
 class EducationalSynthesizer:
-    """Synthesizes educational insights using Claude."""
+    """Synthesizes educational insights using LLM (OpenAI or Anthropic)."""
 
     def __init__(
         self,
         api_key: str,
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str = "gpt-4o",
+        use_openai: bool = True,
     ):
         """
         Initialize synthesizer.
 
         Args:
-            api_key: Anthropic API key
-            model: Claude model to use
+            api_key: OpenAI or Anthropic API key
+            model: Model to use (gpt-4o for OpenAI, claude-sonnet-4-5-20250929 for Anthropic)
+            use_openai: Whether to use OpenAI (True) or Anthropic (False)
         """
-        self.client = AsyncAnthropic(api_key=api_key)
-        self.model = model
+        self.use_openai = use_openai
+
+        if use_openai:
+            from openai import AsyncOpenAI
+            self.client = AsyncOpenAI(api_key=api_key)
+            self.model = model if model else "gpt-4o"
+        else:
+            from anthropic import AsyncAnthropic
+            self.client = AsyncAnthropic(api_key=api_key)
+            self.model = model if model else "claude-sonnet-4-5-20250929"
 
     async def synthesize_insights(
         self,
@@ -71,18 +80,30 @@ class EducationalSynthesizer:
             num_insights=num_insights,
         )
 
-        # Call Claude
+        # Call LLM (OpenAI or Anthropic)
         try:
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=8000,
-                temperature=0.3,  # Lower temperature for consistency
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-
-            # Parse JSON response
-            response_text = response.content[0].text
+            if self.use_openai:
+                # OpenAI API call
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=8000,
+                )
+                response_text = response.choices[0].message.content
+            else:
+                # Anthropic API call
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=8000,
+                    temperature=0.3,  # Lower temperature for consistency
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                response_text = response.content[0].text
 
             # Extract JSON from response (may be wrapped in markdown code block)
             insights_data = self._extract_json(response_text)

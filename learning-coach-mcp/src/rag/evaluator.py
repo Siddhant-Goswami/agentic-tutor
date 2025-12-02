@@ -17,14 +17,18 @@ logger = logging.getLogger(__name__)
 class RAGASEvaluator:
     """Evaluates RAG quality using RAGAS metrics."""
 
-    def __init__(self, min_score: float = 0.70):
+    def __init__(self, min_score: float = 0.70, openai_api_key: Optional[str] = None):
         """
         Initialize RAGAS evaluator.
 
         Args:
             min_score: Minimum acceptable score (default: 0.70)
+            openai_api_key: OpenAI API key for LLM-based metrics (optional)
         """
         self.min_score = min_score
+
+        # Debug logging
+        logger.info(f"RAGASEvaluator init: openai_api_key provided = {bool(openai_api_key)}")
 
         # Lazy import RAGAS (only when needed)
         try:
@@ -34,13 +38,34 @@ class RAGASEvaluator:
                 LLMContextPrecisionWithoutReference,
                 NonLLMContextRecall,
             )
+            from ragas.llms import LangchainLLMWrapper
+            from langchain_openai import ChatOpenAI
 
             self.SingleTurnSample = SingleTurnSample
-            self.faithfulness = Faithfulness()
-            self.context_precision = LLMContextPrecisionWithoutReference()
-            self.context_recall = NonLLMContextRecall()
-            self.ragas_available = True
 
+            # Initialize LLM for metrics if API key provided
+            if openai_api_key:
+                logger.info("Attempting to initialize RAGAS with OpenAI LLM...")
+                try:
+                    llm = ChatOpenAI(model="gpt-4o-mini", api_key=openai_api_key, temperature=0)
+                    ragas_llm = LangchainLLMWrapper(llm)
+
+                    self.faithfulness = Faithfulness(llm=ragas_llm)
+                    self.context_precision = LLMContextPrecisionWithoutReference(llm=ragas_llm)
+                    self.context_recall = NonLLMContextRecall()
+                    logger.info("RAGAS metrics initialized with OpenAI LLM")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize RAGAS with LLM: {e}, using without LLM")
+                    self.faithfulness = Faithfulness()
+                    self.context_precision = LLMContextPrecisionWithoutReference()
+                    self.context_recall = NonLLMContextRecall()
+            else:
+                logger.warning("No OpenAI API key provided for RAGAS, metrics may have limited functionality")
+                self.faithfulness = Faithfulness()
+                self.context_precision = LLMContextPrecisionWithoutReference()
+                self.context_recall = NonLLMContextRecall()
+
+            self.ragas_available = True
             logger.info("RAGAS metrics initialized successfully")
 
         except ImportError as e:
@@ -75,11 +100,14 @@ class RAGASEvaluator:
             response = self._format_insights_for_eval(insights)
             contexts = [chunk["chunk_text"] for chunk in retrieved_chunks]
 
-            # Create RAGAS sample
+            # Create RAGAS sample with reference contexts
+            # For digest generation, we use the synthesized response as reference
+            # This measures: "Did the retrieved contexts contain enough info to generate this response?"
             sample = self.SingleTurnSample(
                 user_input=query,
                 response=response,
                 retrieved_contexts=contexts,
+                reference_contexts=[response],  # Use synthesized response as ground truth
             )
 
             # Evaluate each metric (run concurrently)
@@ -160,7 +188,8 @@ class RAGASEvaluator:
     async def _evaluate_context_recall(self, sample: Any, contexts: List[str]) -> float:
         """Evaluate context recall (coverage of information)."""
         try:
-            # NonLLMContextRecall doesn't need reference contexts
+            # NonLLMContextRecall compares retrieved_contexts with reference_contexts
+            # We provide the synthesized response as reference to measure retrieval coverage
             score = await self.context_recall.single_turn_ascore(sample)
             return float(score)
         except Exception as e:

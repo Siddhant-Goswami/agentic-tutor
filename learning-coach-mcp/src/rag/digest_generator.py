@@ -10,11 +10,11 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from supabase import Client
 
-from .query_builder import QueryBuilder
-from .retriever import VectorRetriever
-from .synthesizer import EducationalSynthesizer
-from .evaluator import RAGASEvaluator, QualityGate
-from ..utils.db import get_supabase_client
+from rag.query_builder import QueryBuilder
+from rag.retriever import VectorRetriever
+from rag.synthesizer import EducationalSynthesizer
+from rag.evaluator import RAGASEvaluator, QualityGate
+from utils.db import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class DigestGenerator:
         openai_api_key: str,
         anthropic_api_key: Optional[str] = None,
         embedding_model: str = "text-embedding-3-small",
-        claude_model: str = "claude-sonnet-4-5-20250929",
+        synthesis_model: str = "gpt-4o",
         ragas_min_score: float = 0.70,
         ragas_max_retries: int = 2,
     ):
@@ -39,10 +39,10 @@ class DigestGenerator:
         Args:
             supabase_url: Supabase project URL
             supabase_key: Supabase API key
-            openai_api_key: OpenAI API key
-            anthropic_api_key: Anthropic API key (optional, falls back to OpenAI if not provided)
+            openai_api_key: OpenAI API key (used for embeddings and synthesis by default)
+            anthropic_api_key: Anthropic API key (optional, uses Anthropic if provided)
             embedding_model: OpenAI embedding model
-            claude_model: Claude model for synthesis
+            synthesis_model: Model for synthesis (gpt-4o for OpenAI, claude-sonnet-4-5-20250929 for Anthropic)
             ragas_min_score: Minimum RAGAS score for quality gate
             ragas_max_retries: Maximum retry attempts for quality gate
         """
@@ -60,25 +60,33 @@ class DigestGenerator:
             embedding_model=embedding_model,
         )
 
-        # Only create Anthropic synthesizer if API key is provided
-        if anthropic_api_key:
+        # Create synthesizer (prefer OpenAI, fallback to Anthropic if provided)
+        if openai_api_key:
+            self.synthesizer = EducationalSynthesizer(
+                api_key=openai_api_key,
+                model=synthesis_model,
+                use_openai=True,
+            )
+            self.use_openai = True
+            logger.info(f"Using OpenAI for synthesis: {synthesis_model}")
+        elif anthropic_api_key:
             self.synthesizer = EducationalSynthesizer(
                 api_key=anthropic_api_key,
-                model=claude_model,
+                model=synthesis_model,
+                use_openai=False,
             )
-            self.use_anthropic = True
+            self.use_openai = False
+            logger.info(f"Using Anthropic for synthesis: {synthesis_model}")
         else:
-            logger.warning(
-                "ANTHROPIC_API_KEY not provided. "
-                "Digest generation will require Anthropic API key. "
-                "Please add ANTHROPIC_API_KEY to your Claude Desktop config or .env file."
-            )
-            # Create a placeholder - will fail gracefully when used
+            logger.error("Either OPENAI_API_KEY or ANTHROPIC_API_KEY required for synthesis")
             self.synthesizer = None
-            self.use_anthropic = False
+            self.use_openai = True
 
         # RAGAS evaluation and quality gate
-        self.evaluator = RAGASEvaluator(min_score=ragas_min_score)
+        self.evaluator = RAGASEvaluator(
+            min_score=ragas_min_score,
+            openai_api_key=openai_api_key,
+        )
         self.quality_gate = QualityGate(
             evaluator=self.evaluator,
             max_retries=ragas_max_retries,
@@ -137,7 +145,7 @@ class DigestGenerator:
             query=query_text,
             user_id=user_id,
             top_k=15,
-            similarity_threshold=0.70,
+            similarity_threshold=0.30,  # Lowered from 0.70 to find more content
         )
 
         if not chunks:
@@ -146,10 +154,10 @@ class DigestGenerator:
 
         # 4. Synthesize insights
         if not self.synthesizer:
-            logger.error("ANTHROPIC_API_KEY is required for digest generation")
+            logger.error("API key is required for digest generation (OpenAI or Anthropic)")
             return self._create_empty_digest(
-                date, 
-                "Anthropic API key not configured. Please add ANTHROPIC_API_KEY to your Claude Desktop config."
+                date,
+                "API key not configured. Please add OPENAI_API_KEY or ANTHROPIC_API_KEY to your environment."
             )
         
         synthesis_result = await self.synthesizer.synthesize_insights(
@@ -266,7 +274,7 @@ class DigestGenerator:
             # Calculate cache expiration (6 hours from now)
             cache_expires_at = datetime.now() + timedelta(hours=6)
 
-            # Upsert digest
+            # Upsert digest (update if exists, insert if not)
             self.db.table("generated_digests").upsert(
                 {
                     "user_id": user_id,
@@ -276,7 +284,8 @@ class DigestGenerator:
                     "generated_at": digest["generated_at"],
                     "cache_expires_at": cache_expires_at.isoformat(),
                     "metadata": digest.get("metadata", {}),
-                }
+                },
+                on_conflict="user_id,digest_date"  # Specify conflict columns
             ).execute()
 
             logger.debug("Digest stored in database")
