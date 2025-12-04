@@ -10,6 +10,7 @@ Evaluates generated insights using RAGAS metrics:
 import logging
 from typing import Dict, Any, List, Optional
 import asyncio
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +251,7 @@ class QualityGate:
         self,
         evaluator: RAGASEvaluator,
         max_retries: int = 2,
+        timeout_minutes: int = 15,
     ):
         """
         Initialize quality gate.
@@ -257,9 +259,11 @@ class QualityGate:
         Args:
             evaluator: RAGAS evaluator instance
             max_retries: Maximum retry attempts (default: 2)
+            timeout_minutes: Maximum total time for quality gate in minutes (default: 15)
         """
         self.evaluator = evaluator
         self.max_retries = max_retries
+        self.timeout_seconds = timeout_minutes * 60
 
     async def apply_gate(
         self,
@@ -269,6 +273,7 @@ class QualityGate:
         synthesizer,  # EducationalSynthesizer instance
         learning_context: Dict[str, Any],
         retry_count: int = 0,
+        start_time: Optional[float] = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, float], bool]:
         """
         Apply quality gate with retry logic.
@@ -280,11 +285,34 @@ class QualityGate:
             synthesizer: Synthesizer instance for retries
             learning_context: Learning context
             retry_count: Current retry attempt
+            start_time: Start time for timeout tracking (internal use)
 
         Returns:
             Tuple of (final_insights, final_scores, passed)
         """
+        # Track start time for timeout
+        if start_time is None:
+            start_time = datetime.now().timestamp()
+
+        # Check timeout
+        elapsed_time = datetime.now().timestamp() - start_time
+        if elapsed_time > self.timeout_seconds:
+            logger.warning(
+                f"⏱️ Quality gate timeout after {elapsed_time/60:.1f} minutes. "
+                f"Delivering current insights with warning."
+            )
+            # Return placeholder scores and mark as failed
+            placeholder_scores = {
+                "faithfulness": 0.0,
+                "context_precision": 0.0,
+                "context_recall": 0.0,
+                "average": 0.0,
+            }
+            return (insights, placeholder_scores, False)
+
         # Evaluate current insights
+        if retry_count == 0:
+            logger.info("🔍 Evaluating digest quality with RAGAS (this may take 2-3 minutes)...")
         scores = await self.evaluator.evaluate_digest(
             query=query,
             insights=insights,
@@ -302,6 +330,11 @@ class QualityGate:
                 f"Quality gate failed (attempt {retry_count + 1}/{self.max_retries + 1}), "
                 f"retrying with stricter synthesis..."
             )
+            logger.info(f"📊 Current scores - Faithfulness: {scores['faithfulness']:.3f}, "
+                       f"Precision: {scores['context_precision']:.3f}, "
+                       f"Recall: {scores['context_recall']:.3f}")
+
+            logger.info("🔄 Regenerating insights with stricter mode (this may take 3-4 minutes)...")
 
             # Retry with stricter synthesis
             retry_result = await synthesizer.synthesize_insights(
@@ -314,6 +347,8 @@ class QualityGate:
 
             retry_insights = retry_result["insights"]
 
+            logger.info("✅ Stricter insights generated, re-evaluating...")
+
             # Recursively apply gate to retry
             return await self.apply_gate(
                 query=query,
@@ -322,6 +357,7 @@ class QualityGate:
                 synthesizer=synthesizer,
                 learning_context=learning_context,
                 retry_count=retry_count + 1,
+                start_time=start_time,  # Preserve start time across retries
             )
 
         # Failed all retries

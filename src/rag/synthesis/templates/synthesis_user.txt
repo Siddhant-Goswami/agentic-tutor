@@ -1,0 +1,69 @@
+# Learning Context
+
+**Current Week**: {current_week}
+**Topics**: {topics}
+**Level**: {difficulty}
+**Goal**: {goal}
+
+# Search Query
+{query}
+
+# Retrieved Content
+
+{context_text}
+
+# Task
+
+Generate **{num_insights}** personalized learning insights based on the content above and tailored to my learning context.
+
+For each insight, provide:
+
+1. **Title**: Concise, specific title (max 100 characters)
+2. **Relevance Reason**: Brief explanation of why this insight matters for my current learning (50-100 words)
+3. **Explanation**: Main educational content using first-principles approach (300-500 words)
+   - Start with fundamentals (the "why")
+   - Build up to implementation (the "how")
+   - Include concrete examples
+   - Connect to my learning goals
+   - Highlight key takeaways
+4. **Practical Takeaway**: One actionable item I can do immediately (50-100 words)
+   - Should be specific and concrete
+   - Should align with my skill level
+   - Should advance toward my learning goal
+5. **Source Attribution**: Full source details (title, author, URL, date)
+
+# Output Format
+
+Return a JSON object matching this exact schema:
+
+```json
+{{
+  "insights": [
+    {{
+      "title": "string (max 100 chars)",
+      "relevance_reason": "string (50-100 words)",
+      "explanation": "string (300-500 words, first-principles approach)",
+      "practical_takeaway": "string (50-100 words, actionable)",
+      "source": {{
+        "title": "string (exact source title)",
+        "author": "string",
+        "url": "string (full URL)",
+        "published_date": "YYYY-MM-DD"
+      }},
+      "metadata": {{
+        "confidence": 0.0-1.0,
+        "estimated_read_time": integer (minutes),
+        "difficulty_level": "beginner|intermediate|advanced",
+        "tags": ["array", "of", "relevant", "tags"]
+      }}
+    }}
+  ]
+}}
+```
+
+IMPORTANT:
+- Return ONLY valid JSON, no additional text
+- Ensure all {num_insights} insights are unique and cover different aspects
+- Base all content strictly on the provided sources
+- Match explanation depth to my {difficulty} level
+- Make practical takeaways specific to my goal: "{goal}"

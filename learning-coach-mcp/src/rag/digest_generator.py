@@ -99,6 +99,7 @@ class DigestGenerator:
         max_insights: int = 7,
         force_refresh: bool = False,
         explicit_query: Optional[str] = None,
+        skip_ragas: bool = False,
     ) -> Dict[str, Any]:
         """
         Generate daily digest for a user.
@@ -109,6 +110,7 @@ class DigestGenerator:
             max_insights: Maximum number of insights to generate (default: 7)
             force_refresh: Skip cache and regenerate (default: False)
             explicit_query: Optional explicit query from user
+            skip_ragas: Skip RAGAS quality evaluation for faster generation (default: False)
 
         Returns:
             Digest dictionary with insights and metadata
@@ -173,17 +175,23 @@ class DigestGenerator:
             logger.warning("No insights generated, returning empty digest")
             return self._create_empty_digest(date, "Failed to generate insights")
 
-        # 5. Apply RAGAS evaluation and quality gate
-        final_insights, ragas_scores, passed_gate = await self.quality_gate.apply_gate(
-            query=query_text,
-            insights=insights,
-            retrieved_chunks=chunks,
-            synthesizer=self.synthesizer,
-            learning_context=learning_context,
-        )
-
-        # Update quality badge based on scores
-        quality_badge = self._determine_quality_badge(ragas_scores)
+        # 5. Apply RAGAS evaluation and quality gate (skip if requested for speed)
+        if skip_ragas:
+            logger.info("⚡ Skipping RAGAS evaluation for faster generation")
+            final_insights = insights
+            ragas_scores = {}
+            passed_gate = True
+            quality_badge = "⚡"  # Fast mode badge
+        else:
+            final_insights, ragas_scores, passed_gate = await self.quality_gate.apply_gate(
+                query=query_text,
+                insights=insights,
+                retrieved_chunks=chunks,
+                synthesizer=self.synthesizer,
+                learning_context=learning_context,
+            )
+            # Update quality badge based on scores
+            quality_badge = self._determine_quality_badge(ragas_scores)
 
         # 6. Create digest object
         digest = {

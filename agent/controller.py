@@ -101,6 +101,9 @@ class AgentController:
         logger.info(f"Starting agent session {session_id} for user {user_id}")
         logger.info(f"Goal: {goal}")
 
+        # Set current user_id in tools so they can resolve "current" to actual UUID
+        self.tools.current_user_id = user_id
+
         iteration = 0
         context = {"user_id": user_id, "iteration_history": []}
 
@@ -706,6 +709,10 @@ Format your response as JSON:
         """
         summary = {}
 
+        # Always include success indicator if present
+        if "success" in result:
+            summary["success"] = result["success"]
+
         # Handle common result structures
         if "error" in result:
             summary["error"] = result["error"]
@@ -720,8 +727,14 @@ Format your response as JSON:
                 {"title": i.get("title", "")} for i in result["insights"][:2]
             ]
 
+        if "num_insights" in result:
+            summary["num_insights"] = result["num_insights"]
+
         if "ragas_scores" in result:
             summary["ragas_scores"] = result["ragas_scores"]
+
+        if "quality_badge" in result:
+            summary["quality_badge"] = result["quality_badge"]
 
         if "week" in result:
             summary["week"] = result["week"]

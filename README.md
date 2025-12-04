@@ -1,528 +1,515 @@
-# AI Learning Coach
+# 🎓 AI Learning Coach
 
-A personalized AI learning assistant using Claude Memory, Model Context Protocol (MCP), and RAG to deliver daily learning insights tailored to your bootcamp progress.
+> **An autonomous AI-powered learning assistant** that delivers personalized daily insights, manages your learning journey, and adapts to your progress using advanced RAG (Retrieval-Augmented Generation) and agentic workflows.
 
-## 🎯 Features
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://img.shields.io/badge/tests-64%20passing-brightgreen.svg)](./tests)
+[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-- **Daily Learning Digest**: AI-generated insights from curated content sources
-- **MCP Integration**: Use as an MCP server with Claude Desktop
-- **RAG Pipeline**: Vector search with OpenAI embeddings and GPT-4o-mini synthesis
-- **Learning Context Tracking**: Automatically tracks your week, topics, and progress
-- **Streamlit Dashboard**: Web interface to view insights and manage settings
-- **Quality Metrics**: RAGAS evaluation scores for each digest
+---
 
-## 📋 Table of Contents
+## ✨ What Makes This Special?
 
-- [Quick Start](#quick-start)
-- [Setup](#setup)
-- [Using as MCP Server](#using-as-mcp-server)
-- [Using the Dashboard](#using-the-dashboard)
-- [Architecture](#architecture)
-- [Troubleshooting](#troubleshooting)
+This isn't just another chatbot - it's a **fully autonomous agent** that:
+- 🧠 **Thinks and plans** its own actions using the SENSE → PLAN → ACT → OBSERVE → REFLECT loop
+- 📚 **Learns from your progress** and adapts difficulty based on your current learning context
+- 🔍 **Searches and synthesizes** insights from curated content sources using advanced vector search
+- ✅ **Evaluates quality** using RAGAS metrics (faithfulness, precision, recall)
+- 💬 **Works everywhere** - Streamlit dashboard, Claude Desktop (MCP), or standalone Python
 
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+- Python 3.10 or higher
+- [Supabase](https://supabase.com) account (free tier)
+- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
+- Optional: [Claude Desktop](https://claude.ai/download) for MCP integration
 
-- Python 3.10+
-- Supabase account (free tier works)
-- OpenAI API key
-- Claude Desktop (for MCP integration)
-
-### Installation
+### 5-Minute Setup
 
 ```bash
 # 1. Clone the repository
-cd ai-learning-coach
+git clone <your-repo-url>
+cd agentic-tutor
 
-# 2. Set up the MCP server
+# 2. Install dependencies
 cd learning-coach-mcp
 pip install -e .
 
-# 3. Configure environment variables
+# 3. Set up environment
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your credentials (see Configuration section)
 
-# 4. Initialize database
-cd ../database
-# Run the SQL migrations in Supabase SQL Editor (see below)
+# 4. Set up database (run migrations in Supabase SQL Editor)
+# See Database Setup section below
+
+# 5. Test it works
+cd ..
+python test_agent.py
 ```
+
+**🎉 That's it!** You now have a working AI learning coach.
 
 ---
 
-## ⚙️ Setup
+## 📖 Table of Contents
 
-### 1. Supabase Database Setup
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Installation](#️-installation)
+- [Configuration](#-configuration)
+- [Usage](#-usage)
+- [Development](#-development)
+- [Contributing](#-contributing)
+- [Documentation](#-documentation)
+- [Troubleshooting](#-troubleshooting)
 
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** in your Supabase dashboard
-3. Run the following migration files in order:
+---
 
-**File: `database/migrations/001_initial_schema.sql`**
-- Creates all tables (users, sources, content, embeddings, etc.)
-- Sets up vector search with HNSW index
-- Enables Row Level Security (RLS)
+## 🎯 Features
 
-**File: `database/migrations/003_insert_test_data_with_rls_bypass.sql`**
-- Inserts test user and learning progress
-- Adds 3 default RSS content sources
-- Creates your initial learning context
+### 🤖 Autonomous Agent
+- **SENSE → PLAN → ACT → OBSERVE → REFLECT** loop for autonomous decision-making
+- Multi-step reasoning with LLM-powered planning
+- Self-correcting behavior with quality checks
+- Tool approval workflow for user confirmation
 
-**File: `database/migrations/004_add_test_user_rls_policies.sql`**
-- Adds RLS policies to allow test user access
-- Required for the app to read/write data
+### 📚 Intelligent RAG System
+- **Vector search** with OpenAI embeddings (text-embedding-3-small)
+- **Semantic retrieval** using Supabase pgvector + HNSW index
+- **Modular architecture** with 64 passing tests (Phase 3 refactored!)
+- **Quality evaluation** using RAGAS metrics
+- **Template-based prompts** for easy customization
 
-### 2. Environment Configuration
+### 🎓 Personalized Learning
+- **Daily digest** generation with 7 educational insights
+- **Context-aware** synthesis (tracks week, topics, difficulty, goals)
+- **Past insights search** to review previous learning
+- **Feedback system** to improve future recommendations
+- **Bootcamp progress sync** to stay aligned with your curriculum
 
-Edit `learning-coach-mcp/.env`:
+### 🔌 Multi-Interface Support
+- **Streamlit Dashboard** - Beautiful web UI with live agent monitoring
+- **Claude Desktop (MCP)** - Natural language interaction
+- **Standalone Python** - Programmatic access via API
+- **REST API** - Future HTTP endpoint support
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   User Interfaces                       │
+│  Dashboard (Streamlit) │ Claude Desktop │ Python API   │
+└────────────────┬────────────────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────────────────┐
+│              Autonomous Agent (SENSE-PLAN-ACT)          │
+│  • LLM Planning    • Tool Registry    • Reflection     │
+│  • State Machine   • Audit Logging    • Quality Gates  │
+└────────────────┬────────────────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────────────────┐
+│                  RAG Pipeline (Phase 3)                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
+│  │  Core    │  │Synthesis │  │Evaluation│             │
+│  │ LLM      │  │ Prompt   │  │ RAGAS    │             │
+│  │ Client   │  │ Builder  │  │ Metrics  │             │
+│  └──────────┘  └──────────┘  └──────────┘             │
+└────────────────┬────────────────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────────────────┐
+│            Supabase Database + pgvector                 │
+│  • Vector embeddings (HNSW index)                       │
+│  • Learning context & progress                          │
+│  • Content sources & digests                            │
+│  • Row-level security (RLS)                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Key Technologies
+- **Agent Framework**: Custom autonomous loop with OpenAI GPT-4o
+- **RAG System**: Modular architecture (64 tests, 100% passing)
+- **Vector DB**: Supabase pgvector with HNSW indexing
+- **LLM**: OpenAI (embeddings + synthesis) or Anthropic Claude
+- **Frontend**: Streamlit with real-time agent monitoring
+- **MCP**: FastMCP for Claude Desktop integration
+
+---
+
+## ⚙️ Installation
+
+### Step 1: Clone Repository
+```bash
+git clone <your-repo-url>
+cd agentic-tutor
+```
+
+### Step 2: Install Python Dependencies
+```bash
+cd learning-coach-mcp
+pip install -e .
+```
+
+This installs:
+- OpenAI SDK
+- Anthropic SDK (optional)
+- Supabase client
+- FastMCP (for Claude Desktop)
+- RAGAS (for evaluation)
+- Streamlit (for dashboard)
+
+### Step 3: Database Setup
+
+1. **Create Supabase Project**
+   - Go to [supabase.com](https://supabase.com)
+   - Create new project (free tier works!)
+   - Note your project URL and API key
+
+2. **Run Migrations**
+
+   Open **SQL Editor** in Supabase and run these files in order:
+
+   ```sql
+   -- File: database/migrations/001_initial_schema.sql
+   -- Creates tables, indexes, and enables pgvector
+
+   -- File: database/migrations/003_insert_test_data_with_rls_bypass.sql
+   -- Adds test user and sample data
+
+   -- File: database/migrations/004_add_test_user_rls_policies.sql
+   -- Configures row-level security
+   ```
+
+### Step 4: Configuration
+
+Create `.env` file in `learning-coach-mcp/`:
 
 ```bash
-# Supabase Configuration
+# Supabase
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
+SUPABASE_KEY=your-anon-key-here
 
-# OpenAI Configuration
+# OpenAI
 OPENAI_API_KEY=sk-proj-your-key-here
 
-# Anthropic (Optional - OpenAI used by default)
+# Anthropic (Optional)
 # ANTHROPIC_API_KEY=sk-ant-your-key-here
 
-# User Configuration
+# User
 DEFAULT_USER_ID=00000000-0000-0000-0000-000000000001
+
+# Agent Config (Optional)
+AGENT_MAX_ITERATIONS=10
+AGENT_LLM_MODEL=gpt-4o
+AGENT_TEMPERATURE=0.3
 ```
 
-**Getting your Supabase credentials:**
-1. Go to your Supabase project
-2. Click **Settings** → **API**
-3. Copy **Project URL** → Use as `SUPABASE_URL`
-4. Copy **anon/public** key → Use as `SUPABASE_KEY`
+**Getting Credentials:**
+- **Supabase**: Settings → API → Copy Project URL & anon key
+- **OpenAI**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 
 ---
 
-## 🔌 Using as MCP Server
+## 🎮 Usage
 
-### What is MCP?
-
-Model Context Protocol (MCP) allows Claude Desktop to connect to external data sources and tools. Your AI Learning Coach becomes available as a set of tools Claude can use to help you learn.
-
-### Configure Claude Desktop
-
-1. **Open Claude Desktop Configuration**
-
-```bash
-# macOS
-code ~/Library/Application\ Support/Claude/claude_desktop_config.json
-
-# Windows
-code %APPDATA%\Claude\claude_desktop_config.json
-
-# Linux
-code ~/.config/Claude/claude_desktop_config.json
-```
-
-2. **Add the MCP Server Configuration**
-
-```json
-{
-  "mcpServers": {
-    "learning-coach": {
-      "command": "/Users/path/miniconda3/bin/python3",
-      "args": ["-m", "src.server"],
-      "cwd": "/absolute/path/to/ai-learning-coach/learning-coach-mcp",
-      "env": {
-        "SUPABASE_URL": "https://your-project.supabase.co",
-        "SUPABASE_KEY": "your-anon-key",
-        "OPENAI_API_KEY": "sk-proj-your-key",
-        "DEFAULT_USER_ID": "00000000-0000-0000-0000-000000000001"
-      }
-    }
-  }
-}
-```
-
-**Important:** Replace `/absolute/path/to/ai-learning-coach` with the actual path on your system.
-
-3. **Restart Claude Desktop**
-
-Close and reopen Claude Desktop. You should see the learning-coach server connected in the bottom-right corner.
-
-### Available MCP Tools
-
-Once connected, Claude Desktop can use these tools:
-
-#### 1. `generate_daily_digest`
-Generate your personalized daily learning digest.
-
-**Example prompt:**
-```
-Generate my daily learning digest
-```
-
-**What it does:**
-- Fetches your learning context (week, topics)
-- Retrieves relevant content from your sources
-- Generates 7 educational insights using AI
-- Returns quality metrics (faithfulness, precision, recall)
-
-#### 2. `search_past_insights`
-Search through previously generated insights.
-
-**Example prompt:**
-```
-Search my past insights for "attention mechanisms"
-```
-
-**Parameters:**
-- `query`: What to search for
-- `limit`: Number of results (default: 10)
-- `date_range`: Optional date filtering
-
-#### 3. `manage_sources`
-Add, remove, or update content sources.
-
-**Example prompts:**
-```
-Add RSS feed: https://blog.example.com/feed.xml with priority 5
-
-List my content sources
-
-Deactivate the source with URL: https://old-blog.com/feed.xml
-```
-
-**Parameters:**
-- `action`: "add", "remove", "list", or "update"
-- `source_type`: "rss", "twitter", "reddit", etc.
-- `identifier`: URL or handle
-- `priority`: 1-5 (higher = more important)
-
-#### 4. `provide_feedback`
-Submit feedback on insights to improve future recommendations.
-
-**Example prompts:**
-```
-Mark insight abc123 as helpful
-
-This insight xyz789 is too advanced for me
-```
-
-**Feedback types:**
-- `helpful`: Great insight
-- `not_relevant`: Not related to my learning
-- `too_basic`: Already know this
-- `too_advanced`: Over my head
-- `incorrect`: Wrong information
-
-#### 5. `sync_bootcamp_progress`
-Update your current week and learning topics.
-
-**Example prompts:**
-```
-I'm now in week 8 learning about CNNs and Computer Vision
-
-Update my topics to: Deep Learning, Neural Networks
-```
-
-### Example Usage in Claude Desktop
-
-**Scenario 1: Morning Learning Routine**
-```
-You: Good morning! Generate my daily learning digest for today.
-
-Claude: [Uses generate_daily_digest tool]
-Here are your 7 personalized insights for Week 7:
-
-1. Understanding Multi-Head Attention (Intermediate)
-   Why this matters: Core concept for transformers...
-   [Full insight with explanation and takeaway]
-
-2. Positional Encoding in Transformers (Advanced)
-   ...
-
-Quality Scores:
-- Faithfulness: 0.87
-- Context Precision: 0.82
-- Context Recall: 0.78
-```
-
-**Scenario 2: Managing Content Sources**
-```
-You: Add Andrej Karpathy's blog as a high priority source
-
-Claude: [Uses manage_sources tool]
-✓ Added RSS feed: Andrej Karpathy's Blog
-Priority: 5
-Status: Active
-
-I'll start including insights from this source in your future digests.
-```
-
-**Scenario 3: Searching Past Learning**
-```
-You: What did I learn about backpropagation last week?
-
-Claude: [Uses search_past_insights tool]
-I found 3 insights about backpropagation from your digests:
-
-1. From Nov 18: "Chain Rule in Backpropagation"
-   You learned how gradients flow backward through layers...
-
-2. From Nov 20: "Vanishing Gradients Problem"
-   ...
-```
-
----
-
-## 🖥️ Using the Dashboard
-
-The Streamlit dashboard provides a web interface to view and manage your learning.
-
-### Start the Dashboard
+### Option 1: Streamlit Dashboard (Recommended for beginners)
 
 ```bash
 cd dashboard
 streamlit run app.py
 ```
 
-Opens at: http://localhost:8501
+Opens at: **http://localhost:8501**
 
-### Dashboard Features
+**Features:**
+- 🏠 **Home**: View today's digest, real-time agent logs
+- 🎯 **Agent**: Interactive agent playground with approval workflow
+- ⚙️ **Settings**: Update learning context, manage sources
+- 📊 **Analytics**: View quality metrics and usage stats
 
-#### 📚 Today's Digest Page
+### Option 2: Claude Desktop (MCP)
 
-- **View Today's Insights**: See AI-generated learning insights
-- **Quality Metrics**: Faithfulness, Precision, Recall scores
-- **Source Attribution**: See where each insight came from
-- **Feedback Buttons**: Rate insights (👍 👎 📉 📈)
-- **Refresh Digest**: Generate new insights
+1. **Configure Claude Desktop**
 
-#### ⚙️ Settings Page
+   Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
-**Learning Context Tab:**
-- Edit current week (1-24)
-- Change difficulty level (beginner/intermediate/advanced)
-- Update learning topics
-- Set learning goals
-- Save changes to database
-
-**Sources Tab:**
-- View all RSS feeds
-- Toggle sources active/inactive
-- See priority and status
-- Add new RSS sources
-
-**System Tab:**
-- Database connection status
-- API configuration status
-- Database statistics (articles, embeddings, digests)
-- Clear digest cache
-- Refresh data
-
-### Workflow Example
-
-1. **Morning:** Open dashboard to view today's digest
-2. **Read:** Go through insights, expand explanations
-3. **Feedback:** Click 👍 on helpful insights, 👎 on irrelevant ones
-4. **Update:** Go to Settings → Learning Context to update your progress
-5. **Customize:** Add new RSS sources in Settings → Sources
-
----
-
-## 🏗️ Architecture
-
-### System Components
-
-```
-┌─────────────────────────────────────────────┐
-│           Claude Desktop (MCP)              │
-│  - generate_daily_digest                    │
-│  - search_past_insights                     │
-│  - manage_sources                           │
-│  - provide_feedback                         │
-│  - sync_bootcamp_progress                   │
-└─────────────────┬───────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────┐
-│        Learning Coach MCP Server            │
-│  - FastMCP Framework                        │
-│  - Tool Handlers                            │
-│  - Claude Memory Integration                │
-└─────────────────┬───────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────┐
-│            RAG Pipeline                     │
-│  - Query Builder                            │
-│  - Vector Retriever (HNSW)                  │
-│  - OpenAI GPT-4o-mini Synthesis             │
-│  - Quality Gate (RAGAS)                     │
-└─────────────────┬───────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────────┐
-│         Supabase Database                   │
-│  - PostgreSQL + pgvector                    │
-│  - 7 tables (users, sources, content, etc.) │
-│  - HNSW vector index (halfvec)              │
-│  - Row Level Security (RLS)                 │
-└─────────────────────────────────────────────┘
-```
-
-### Tech Stack
-
-**Backend:**
-- **FastMCP**: MCP server framework
-- **OpenAI**: text-embedding-3-small (embeddings), gpt-4o-mini (synthesis)
-- **Supabase**: PostgreSQL + pgvector + RLS
-- **Python**: 3.10+
-
-**Frontend:**
-- **Streamlit**: Dashboard UI
-- **Plotly**: Not used in simplified version
-
-**Data Flow:**
-1. RSS feeds → Content ingestion → Database
-2. Content → Chunking → Embeddings (OpenAI) → Vector DB
-3. User query → Vector search → Relevant chunks
-4. Chunks + Context → GPT-4o-mini → Insights
-5. Insights + RAGAS → Quality scores → Storage
-
----
-
-## 🔧 Troubleshooting
-
-### MCP Server Not Connecting
-
-**Problem:** Claude Desktop doesn't show the learning-coach server or shows "spawn python ENOENT" error
-
-**Solutions:**
-1. **Fix "spawn python ENOENT" error**: Use the full path to Python instead of just `python`
-   ```bash
-   # Find your Python path
-   which python3
-   # Use this path in claude_desktop_config.json
-   # Example: "/Users/yourname/miniconda3/bin/python3"
+   ```json
+   {
+     "mcpServers": {
+       "learning-coach": {
+         "command": "/path/to/python3",
+         "args": ["-m", "src.server"],
+         "cwd": "/absolute/path/to/learning-coach-mcp",
+         "env": {
+           "SUPABASE_URL": "https://your-project.supabase.co",
+           "SUPABASE_KEY": "your-key",
+           "OPENAI_API_KEY": "sk-proj-your-key"
+         }
+       }
+     }
+   }
    ```
-2. Check Claude Desktop config path is correct:
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-3. Verify absolute path to `learning-coach-mcp` directory (no relative paths)
-4. Ensure environment variables are set in config (SUPABASE_URL, OPENAI_API_KEY, etc.)
-5. Restart Claude Desktop completely (quit and reopen)
-6. Check logs in Claude Desktop developer console for specific errors
 
-### Database Connection Errors
+2. **Restart Claude Desktop**
 
-**Problem:** "Could not connect to database" or RLS errors
+3. **Use Natural Language**
+   ```
+   You: Generate my daily learning digest
+   Claude: [Uses agent tool to create personalized insights]
 
-**Solutions:**
-1. Verify SUPABASE_URL and SUPABASE_KEY in `.env`
-2. Run all 3 migration files in Supabase SQL Editor:
-   - `001_initial_schema.sql`
-   - `003_insert_test_data_with_rls_bypass.sql`
-   - `004_add_test_user_rls_policies.sql`
-3. Check RLS policies allow test user access
-4. Try using Supabase service role key for testing
+   You: Search my past insights about transformers
+   Claude: [Searches your learning history]
+   ```
 
-### No Insights Generated
+### Option 3: Python API
 
-**Problem:** "No digest available for today"
+```python
+from agent.controller import AgentController, AgentConfig
 
-**Solutions:**
-1. Check OpenAI API key is valid
-2. Ensure you have content sources in database
-3. Run content ingestion: `python3 quick_test_ingestion.py`
-4. Check database has embeddings: Go to Settings → System tab
-5. Try "Generate Today's Digest" button on home page
+# Configure
+config = AgentConfig(
+    max_iterations=10,
+    llm_model="gpt-4o",
+    temperature=0.3,
+)
 
-### JSON Generation Errors
+# Initialize
+controller = AgentController(
+    config=config,
+    supabase_url="https://your-project.supabase.co",
+    supabase_key="your-key",
+    openai_api_key="your-key",
+)
 
-**Problem:** "JSON could not be generated" errors
+# Run
+result = await controller.run(
+    goal="Generate my daily learning digest",
+    user_id="your-user-id",
+)
 
-**Solutions:**
-1. Already fixed in current version with fallback handling
-2. Check OpenAI API key has credits
-3. Verify internet connection
-4. Try refreshing the page
-
-### Extra Navigation Showing
-
-**Problem:** "app", "home", "settings" navigation appearing
-
-**Solutions:**
-1. Already fixed - `pages/` directory renamed to `views/`
-2. Hard refresh browser: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
-3. Clear browser cache
-4. Restart Streamlit: `pkill -f streamlit && streamlit run app.py`
+print(result.output)  # Final digest
+print(result.logs)    # Execution trace
+```
 
 ---
 
-## 📚 Additional Resources
+## 🛠️ Development
 
-### Quick Commands
+### Project Structure
+
+```
+agentic-tutor/
+├── agent/                      # Autonomous agent (SENSE-PLAN-ACT)
+│   ├── controller.py          # Main agent loop
+│   ├── tools.py               # Tool registry
+│   ├── logger.py              # Audit logging
+│   └── prompts/               # LLM prompts
+├── learning-coach-mcp/        # RAG & MCP server
+│   └── src/
+│       ├── rag/               # RAG system (Phase 3 refactored!)
+│       │   ├── core/          # LLM client, base classes
+│       │   ├── synthesis/     # Insight generation
+│       │   ├── evaluation/    # RAGAS metrics
+│       │   └── retrieval/     # Vector search
+│       ├── server.py          # MCP server
+│       └── utils/             # Shared utilities
+├── dashboard/                 # Streamlit UI
+│   ├── app.py                # Main app
+│   └── views/                # Pages
+├── database/                  # SQL migrations
+│   └── migrations/
+├── tests/                     # Test suite (64 tests!)
+│   └── unit/rag/             # RAG unit tests
+└── docs/                      # Documentation
+```
+
+### Running Tests
 
 ```bash
-# Start dashboard
-cd dashboard && streamlit run app.py
+# Run all tests
+pytest
 
-# Run test ingestion
-python3 quick_test_ingestion.py
+# Run RAG tests
+pytest tests/unit/rag/ -v
 
-# Setup and test
-python3 setup_and_test.py
-
-# Install MCP server
-cd learning-coach-mcp && pip install -e .
+# Run with coverage
+pytest --cov=src --cov-report=html
 ```
 
-### File Structure
+**Current Status:** 64/64 tests passing (100%) ✅
 
-```
-ai-learning-coach/
-├── README.md                          # This file
-├── learning-coach-mcp/               # MCP Server
-│   ├── src/
-│   │   ├── server.py                 # MCP tools
-│   │   ├── rag/                      # RAG pipeline
-│   │   ├── ingestion/                # Content fetching
-│   │   └── tools/                    # Source & feedback management
-│   ├── .env                          # Configuration
-│   └── pyproject.toml                # Python dependencies
-├── dashboard/                         # Streamlit UI
-│   ├── app.py                        # Main dashboard
-│   ├── views/
-│   │   ├── home.py                   # Today's digest page
-│   │   └── settings.py               # Settings page
-│   └── digest_api.py                 # API wrapper
-├── database/                          # Database setup
-│   └── migrations/
-│       ├── 001_initial_schema.sql    # Main schema
-│       ├── 003_insert_test_data...   # Test data
-│       └── 004_add_test_user_rls...  # RLS policies
-└── docs/                              # Documentation
-    ├── QUICK_START.md
-    ├── TEST_REPORT.md
-    └── VERIFICATION_COMPLETE.md
-```
+### Code Quality
+
+We follow modern Python best practices:
+- ✅ Type hints everywhere (`mypy` compatible)
+- ✅ Protocol-based interfaces
+- ✅ Dependency injection
+- ✅ Comprehensive error handling
+- ✅ Extensive logging
+- ✅ Template-based prompts
+
+### Making Changes
+
+1. **Read** [CONTRIBUTING.md](./CONTRIBUTING.md) first!
+2. **Create branch** from `main`
+3. **Make changes** following code style
+4. **Add tests** for new functionality
+5. **Run tests** to verify
+6. **Submit PR** with clear description
 
 ---
 
 ## 🤝 Contributing
 
-This is a personal learning project built for the 100xEngineers AI bootcamp. Feel free to fork and adapt for your own learning journey!
+We welcome contributions! Whether you're:
+- 🐛 Fixing a bug
+- ✨ Adding a feature
+- 📝 Improving documentation
+- 🧪 Writing tests
 
-## 📄 License
+**Please read [CONTRIBUTING.md](./CONTRIBUTING.md)** for detailed guidelines.
 
-MIT License - See LICENSE file for details
+### Quick Start for Contributors
+1. Fork the repository
+2. Clone your fork
+3. Create a feature branch
+4. Make your changes
+5. Run tests
+6. Submit a pull request
 
-## 🙏 Acknowledgments
-
-- Built with [Claude](https://claude.ai) and [MCP](https://modelcontextprotocol.io)
-- Inspired by the need for personalized, context-aware learning
-- Uses [OpenAI](https://openai.com) for embeddings and synthesis
-- Powered by [Supabase](https://supabase.com) for vector storage
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full guide.
 
 ---
 
-**Happy Learning! 📚🚀**
+## 📚 Documentation
 
-For questions or issues, see the [Troubleshooting](#troubleshooting) section above.
+### For Users
+- [Quick Start Guide](./docs/QUICK_START.md) - Get up and running fast
+- [User Guide](./docs/USER_GUIDE.md) - Complete feature walkthrough
+- [Troubleshooting](./docs/TROUBLESHOOTING.md) - Common issues & solutions
+
+### For Developers
+- [Architecture Guide](./docs/ARCHITECTURE.md) - System design deep dive
+- [Codebase Guide](./docs/CODEBASE_GUIDE.md) - Code walkthrough
+- [Contributing Guide](./CONTRIBUTING.md) - How to contribute
+- [Phase 3 Migration](./docs/PHASE3_MIGRATION.md) - RAG refactoring guide
+
+### Technical Documentation
+- [Phase 3 Completion Summary](./.claude/tasks/PHASE3_COMPREHENSIVE_REVIEW_SUMMARY.md)
+- [Edge Case Analysis](./.claude/tasks/PHASE3_EDGE_CASE_ANALYSIS.md)
+- [Agent Implementation](./.claude/tasks/agentic-learning-coach-implementation-plan.md)
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### MCP Server Not Connecting
+```bash
+# Find Python path
+which python3
+
+# Use full path in claude_desktop_config.json
+"/Users/yourname/miniconda3/bin/python3"
+
+# Restart Claude Desktop completely
+```
+
+#### Database Connection Errors
+```bash
+# Verify credentials
+echo $SUPABASE_URL
+echo $SUPABASE_KEY
+
+# Check migrations ran
+# Go to Supabase → SQL Editor → Run migrations in order
+```
+
+#### No Insights Generated
+```bash
+# Check OpenAI key
+echo $OPENAI_API_KEY
+
+# Verify content in database
+# Dashboard → Settings → System → Check stats
+
+# Run ingestion
+cd learning-coach-mcp
+python -m src.ingestion.rss_ingestion
+```
+
+### Getting Help
+
+1. Check [Troubleshooting Guide](./docs/TROUBLESHOOTING.md)
+2. Search [existing issues](https://github.com/yourusername/agentic-tutor/issues)
+3. Open a [new issue](https://github.com/yourusername/agentic-tutor/issues/new) with:
+   - Clear description
+   - Steps to reproduce
+   - Error messages
+   - Environment details
+
+---
+
+## 🎓 Learning Resources
+
+### Understanding the Codebase
+- Start with [CODEBASE_GUIDE.md](./docs/CODEBASE_GUIDE.md)
+- Read [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for system design
+- Check [agent/README.md](./agent/README.md) for agent details
+- Review [Phase 3 refactoring docs](./.claude/tasks/PHASE3_COMPLETION.md)
+
+### Key Concepts
+- **RAG (Retrieval-Augmented Generation)**: Combines vector search with LLM synthesis
+- **MCP (Model Context Protocol)**: Connects Claude Desktop to external tools
+- **Autonomous Agents**: Self-planning systems using SENSE-PLAN-ACT loops
+- **Vector Embeddings**: Semantic search using OpenAI text-embedding-3-small
+- **RAGAS**: Quality evaluation framework for RAG systems
+
+---
+
+## 📄 License
+
+MIT License - See [LICENSE](./LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+Built with love using:
+- [OpenAI](https://openai.com) - Embeddings & LLM
+- [Anthropic Claude](https://anthropic.com) - Alternative LLM
+- [Supabase](https://supabase.com) - Vector database
+- [FastMCP](https://github.com/jlowin/fastmcp) - MCP framework
+- [RAGAS](https://github.com/explodinggradients/ragas) - RAG evaluation
+- [Streamlit](https://streamlit.io) - Dashboard UI
+
+Special thanks to:
+- **100xEngineers AI Bootcamp** - For the learning journey
+- **Claude** - For pair programming this entire project
+- **Open source community** - For amazing tools and libraries
+
+---
+
+## 🌟 Star History
+
+If you find this project helpful, please consider giving it a star! ⭐
+
+---
+
+## 📞 Contact
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/agentic-tutor/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/agentic-tutor/discussions)
+- **Email**: your-email@example.com
+
+---
+
+**Made with ❤️ by [Your Name]**
+
+**Happy Learning! 🚀📚**

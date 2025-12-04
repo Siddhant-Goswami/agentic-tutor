@@ -45,6 +45,7 @@ class ToolRegistry:
         self.supabase_key = supabase_key
         self.openai_api_key = openai_api_key
         self.anthropic_api_key = anthropic_api_key
+        self.current_user_id: Optional[str] = None  # Set by agent when run starts
 
         # Tool definitions
         self.tools = {
@@ -336,7 +337,7 @@ class ToolRegistry:
         """Execute get-user-context tool."""
         from utils.db import get_supabase_client
 
-        user_id = args.get("user_id", "00000000-0000-0000-0000-000000000001")
+        user_id = self.normalize_user_id(args.get("user_id"))
 
         # Get user context from database
         db = get_supabase_client(self.supabase_url, self.supabase_key)
@@ -348,6 +349,7 @@ class ToolRegistry:
 
         if not progress_result.data:
             return {
+                "user_id": user_id,
                 "week": None,
                 "topics": [],
                 "difficulty": "intermediate",
@@ -368,6 +370,7 @@ class ToolRegistry:
         )
 
         return {
+            "user_id": user_id,
             "week": progress.get("current_week"),
             "topics": progress.get("current_topics", []),
             "difficulty": progress.get("difficulty_level", "intermediate"),
@@ -439,8 +442,8 @@ class ToolRegistry:
         user_context = args.get("user_context", {})
         explicit_query = args.get("explicit_query")  # NEW: for Q&A mode
 
-        # Get user_id from context
-        user_id = user_context.get("user_id", "00000000-0000-0000-0000-000000000001")
+        # Get user_id from context and normalize it
+        user_id = self.normalize_user_id(user_context.get("user_id"))
 
         try:
             # Initialize proper DigestGenerator
@@ -454,13 +457,14 @@ class ToolRegistry:
 
             logger.info(f"Generating digest: date={digest_date}, insights={max_insights}, explicit_query={explicit_query}")
 
-            # Call actual RAG pipeline
+            # Call actual RAG pipeline with skip_ragas=True for faster agent mode
             result = await generator.generate(
                 user_id=user_id,
                 date=digest_date,
                 max_insights=max_insights,
                 force_refresh=force_refresh,
                 explicit_query=explicit_query,  # Pass explicit query for Q&A mode
+                skip_ragas=True,  # Skip RAGAS for faster generation in agent mode
             )
 
             # Ensure proper format for agent with success indicator
@@ -536,7 +540,7 @@ class ToolRegistry:
         """Execute sync-progress tool."""
         from utils.db import get_supabase_client
 
-        user_id = args.get("user_id", "00000000-0000-0000-0000-000000000001")
+        user_id = self.normalize_user_id(args.get("user_id"))
 
         # Direct database query for progress
         db = get_supabase_client(self.supabase_url, self.supabase_key)
@@ -674,7 +678,7 @@ class ToolRegistry:
         from .research_planner import ResearchPlanner
 
         query = args.get("query", "")
-        user_id = args.get("user_id", "00000000-0000-0000-0000-000000000001")
+        user_id = self.normalize_user_id(args.get("user_id"))
         user_context = args.get("user_context")
 
         if not query:
@@ -727,6 +731,22 @@ class ToolRegistry:
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
+
+    def normalize_user_id(self, user_id: Optional[str]) -> str:
+        """
+        Normalize user_id, converting 'current' to actual user_id.
+
+        Args:
+            user_id: User ID (can be "current", UUID, or None)
+
+        Returns:
+            Normalized UUID string
+        """
+        DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+        if user_id == "current" or user_id is None:
+            return self.current_user_id if self.current_user_id else DEFAULT_USER_ID
+        return user_id
 
     def get_tool_schemas_for_prompt(self) -> str:
         """
