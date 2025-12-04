@@ -11,8 +11,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Add learning-coach-mcp to path and set PYTHONPATH for proper package imports
-learning_coach_path = str(Path(__file__).parent / "learning-coach-mcp")
-src_path = str(Path(__file__).parent / "learning-coach-mcp" / "src")
+project_root = Path(__file__).parent.parent.parent  # Go up to project root from tests/e2e/
+learning_coach_path = str(project_root / "learning-coach-mcp")
+src_path = str(project_root / "learning-coach-mcp" / "src")
 if learning_coach_path not in sys.path:
     sys.path.insert(0, learning_coach_path)
 if src_path not in sys.path:
@@ -22,7 +23,7 @@ if src_path not in sys.path:
 os.chdir(src_path)
 
 # Load environment variables
-load_dotenv(Path(__file__).parent / "learning-coach-mcp" / ".env")
+load_dotenv(project_root / "learning-coach-mcp" / ".env")
 
 # Test results
 results = {
