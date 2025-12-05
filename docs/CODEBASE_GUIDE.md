@@ -4,6 +4,10 @@
 
 This guide will walk you through the entire codebase, explaining how everything works together. Perfect for new contributors or anyone wanting to understand the system.
 
+> **✨ Note:** This project was recently refactored to a clean `src/` architecture!
+> All core logic now lives in the `src/` library (131 tests passing ✅).
+> See [src/README.md](../src/README.md) for beginner-friendly architecture guide.
+
 ---
 
 ## 📚 Table of Contents
@@ -51,117 +55,160 @@ Result to User
 
 ## 📁 Directory Structure
 
+### 🎯 Library + Applications Pattern
+
+The project follows a **"core library + applications"** architecture:
+- **`src/`** = Core library (the brain) - all the smart algorithms
+- **`dashboard/`** = Application using the library (Streamlit UI)
+- **`learning-coach-mcp/`** = Application using the library (MCP server)
+
 ```
 agentic-tutor/
-├── agent/                          # 🤖 Autonomous agent
-│   ├── controller.py              # Main SENSE-PLAN-ACT loop
-│   ├── tools.py                   # Tool registry (wraps RAG, DB)
-│   ├── logger.py                  # Execution logging
-│   └── prompts/                   # LLM prompts for planning
+├── src/                           # 🧠 CORE LIBRARY (100% type-safe, tested)
+│   ├── agent/                    # Autonomous agent system
+│   │   ├── controllers/         # AgentController, StepExecutor
+│   │   │   ├── agent_controller.py   # Main SENSE-PLAN-ACT loop
+│   │   │   └── step_executor.py      # Individual step execution
+│   │   ├── models/              # Data models
+│   │   │   ├── agent_config.py       # AgentConfig dataclass
+│   │   │   └── agent_result.py       # AgentResult dataclass
+│   │   ├── tools/               # Tool system
+│   │   │   ├── registry.py           # ToolRegistry (manages tools)
+│   │   │   ├── base.py               # BaseToolImpl, protocols
+│   │   │   └── implementations/      # Built-in tools
+│   │   ├── utils/               # Utilities
+│   │   │   ├── logger.py             # Agent execution logging
+│   │   │   └── response_parser.py    # JSON parsing
+│   │   ├── planning/            # Research planning
+│   │   │   └── research_planner.py
+│   │   └── prompts/             # LLM prompt templates
+│   │
+│   ├── rag/                     # RAG Pipeline (fully modular!)
+│   │   ├── core/               # Base classes & infrastructure
+│   │   │   ├── llm_client.py        # Unified OpenAI/Anthropic client
+│   │   │   ├── base_synthesizer.py  # Protocol for synthesizers
+│   │   │   └── base_evaluator.py    # Protocol for evaluators
+│   │   │
+│   │   ├── synthesis/          # Content synthesis
+│   │   │   ├── synthesizer.py       # EducationalSynthesizer
+│   │   │   ├── prompt_builder.py    # Template-based prompts
+│   │   │   ├── parsers.py           # JSON parsing & validation
+│   │   │   └── templates/           # Prompt templates (.txt)
+│   │   │
+│   │   ├── evaluation/         # Quality evaluation
+│   │   │   ├── evaluator.py         # InsightEvaluator (RAGAS)
+│   │   │   └── metrics.py           # RAGASMetrics wrapper
+│   │   │
+│   │   ├── retrieval/          # Content retrieval
+│   │   │   ├── retriever.py         # VectorRetriever
+│   │   │   ├── query_builder.py     # QueryBuilder
+│   │   │   └── insight_search.py    # Past insights search
+│   │   │
+│   │   └── digest/             # Daily digest generation
+│   │       └── digest_generator.py  # DigestGenerator, QualityGate
+│   │
+│   ├── database/               # Database utilities
+│   │   └── client.py          # Supabase client helpers
+│   │
+│   └── core/                   # Core infrastructure
+│       ├── config.py          # AppConfig
+│       ├── exceptions.py      # Custom exceptions
+│       └── types.py           # Type definitions
 │
-├── learning-coach-mcp/            # 🧠 RAG & MCP Server
+├── learning-coach-mcp/         # 📱 APPLICATION: MCP Server
 │   └── src/
-│       ├── rag/                   # RAG System (Phase 3 refactored!)
-│       │   ├── core/             # Base classes & LLM client
-│       │   │   ├── llm_client.py        # Unified OpenAI/Anthropic client
-│       │   │   ├── base_synthesizer.py  # Protocol for synthesizers
-│       │   │   └── base_evaluator.py    # Protocol for evaluators
-│       │   │
-│       │   ├── synthesis/        # Content synthesis
-│       │   │   ├── synthesizer.py       # Main synthesis logic
-│       │   │   ├── prompt_builder.py    # Template-based prompts
-│       │   │   ├── parsers.py           # JSON parsing & validation
-│       │   │   └── templates/           # Prompt templates (.txt)
-│       │   │
-│       │   ├── evaluation/       # Quality evaluation
-│       │   │   ├── evaluator.py         # RAGAS integration
-│       │   │   └── metrics.py           # Quality metrics
-│       │   │
-│       │   └── retrieval/        # Content retrieval
-│       │       ├── retriever.py         # Vector search
-│       │       ├── query_builder.py     # Query enhancement
-│       │       └── insight_search.py    # Past insights search
-│       │
-│       ├── server.py             # MCP server (FastMCP)
-│       └── utils/                # Shared utilities
-│           └── supabase_client.py   # Database client
+│       ├── server.py          # MCP server (imports from src/)
+│       ├── db/                # Database migrations
+│       ├── integrations/      # Bootcamp sync
+│       ├── ingestion/         # Content ingestion
+│       ├── ui/                # UI templates
+│       └── tools/             # MCP tool definitions
 │
-├── dashboard/                     # 🖥️ Streamlit UI
-│   ├── app.py                    # Main app entry point
-│   ├── views/                    # Pages
-│   │   ├── home.py              # Today's digest
-│   │   ├── agent.py             # Agent playground
-│   │   └── settings.py          # Configuration
-│   └── digest_api.py            # RAG API wrapper
+├── dashboard/                  # 📱 APPLICATION: Streamlit UI
+│   ├── app.py                # Main app (imports from src/)
+│   ├── views/                # Pages
+│   │   ├── home.py          # Today's digest
+│   │   ├── agent.py         # Agent playground
+│   │   └── settings.py      # Configuration
+│   └── digest_api.py        # RAG API wrapper
 │
-├── database/                      # 🗄️ Database
-│   └── migrations/               # SQL migrations
+├── database/                   # 🗄️ Database migrations
+│   └── migrations/            # SQL schema
 │       ├── 001_initial_schema.sql
 │       ├── 003_insert_test_data_with_rls_bypass.sql
 │       └── 004_add_test_user_rls_policies.sql
 │
-├── tests/                         # 🧪 Tests (64 tests!)
-│   └── unit/rag/                # RAG unit tests
-│       ├── core/                # LLM client tests
-│       ├── synthesis/           # Synthesis tests
-│       └── evaluation/          # Evaluation tests
+├── tests/                         # 🧪 Tests (131 tests passing!)
+│   ├── unit/                    # Unit tests for src/
+│   │   ├── agent/              # Agent system tests
+│   │   ├── rag/                # RAG pipeline tests
+│   │   └── core/               # Core infrastructure tests
+│   ├── integration/            # Integration tests
+│   └── e2e/                    # End-to-end tests
 │
 └── docs/                          # 📖 Documentation
-    ├── CODEBASE_GUIDE.md        # This file!
-    ├── ARCHITECTURE.md
-    └── USER_GUIDE.md
+    └── CODEBASE_GUIDE.md        # This file!
 ```
 
 ---
 
 ## 🧩 Core Components
 
-### 1. Autonomous Agent (`agent/`)
+### 1. Autonomous Agent (`src/agent/`)
 
 **What it does:** Implements the SENSE → PLAN → ACT → OBSERVE → REFLECT loop
 
-**Key File:** `agent/controller.py`
+**Key Files:**
+- `src/agent/controllers/agent_controller.py` - Main orchestrator
+- `src/agent/controllers/step_executor.py` - Individual step execution
 
 ```python
-# High-level flow
+# Import from the core library
+from src.agent.controllers.agent_controller import AgentController
+from src.agent.models.agent_config import AgentConfig
+
+# High-level flow in agent_controller.py
 async def run(goal: str, user_id: str):
-    while not goal_achieved and iterations < max_iterations:
-        # SENSE: Gather context
-        context = await self._sense(user_id, goal)
+    while iteration < self.config.max_iterations:
+        # SENSE: Gather user context
+        context = await self.executor.sense(user_id, context, session_id, iteration)
 
         # PLAN: Decide next action
-        plan = await self._plan(context, goal)
+        plan = await self.executor.plan(goal, context, session_id, iteration)
 
-        # ACT: Execute the action
-        result = await self._act(plan)
+        # ACT: Execute the planned action
+        result = await self.executor.act(plan, session_id, iteration)
 
         # OBSERVE: Log the result
-        await self._observe(result)
+        self.executor.observe(plan, result, session_id, iteration)
 
         # REFLECT: Evaluate progress
-        achieved = await self._reflect(goal, result)
+        reflection = await self.executor.reflect(
+            plan, result, goal, context, session_id, iteration
+        )
 
-    return final_result
+    return AgentResult(output, logs, iteration_count, status)
 ```
 
-**Read this first if:** You want to understand the autonomous behavior
+**Read this first if:** You want to understand autonomous behavior
 
 **Key Concepts:**
-- **Tool Registry**: Available actions (search, generate, etc.)
-- **LLM Planning**: GPT-4 decides next steps
+- **Tool Registry** (`src/agent/tools/registry.py`): Manages available tools
+- **LLM Planning**: GPT-4 decides next steps using prompts from `src/agent/prompts/`
 - **Reflection**: Quality checks and progress evaluation
+- **Protocol-based**: Uses dependency injection for testability
 
 ---
 
-### 2. RAG Pipeline (`learning-coach-mcp/src/rag/`)
+### 2. RAG Pipeline (`src/rag/`)
 
 **What it does:** Retrieves and synthesizes personalized learning content
 
-#### 2a. Core Module (`rag/core/`)
+#### 2a. Core Module (`src/rag/core/`)
 
 **Purpose:** Base classes and LLM abstraction
 
-**Key File:** `llm_client.py`
+**Key File:** `src/rag/core/llm_client.py`
 
 ```python
 # Unified LLM client - works with OpenAI or Anthropic
@@ -185,14 +232,14 @@ class LLMClient:
 - Single interface for all LLM operations
 - Easy to test (just mock the client!)
 
-#### 2b. Synthesis Module (`rag/synthesis/`)
+#### 2b. Synthesis Module (`src/rag/synthesis/`)
 
 **Purpose:** Generate insights from retrieved content
 
 **Key Files:**
-1. **`prompt_builder.py`** - Builds prompts from templates
-2. **`parsers.py`** - Parses and validates LLM responses
-3. **`synthesizer.py`** - Main synthesis logic
+1. **`src/rag/synthesis/prompt_builder.py`** - Builds prompts from templates
+2. **`src/rag/synthesis/parsers.py`** - Parses and validates LLM responses
+3. **`src/rag/synthesis/synthesizer.py`** - EducationalSynthesizer (main logic)
 
 **Flow:**
 
@@ -230,7 +277,7 @@ Generate {num_insights} educational insights...
 
 **Why templates?** Non-engineers can improve prompts without touching code!
 
-#### 2c. Evaluation Module (`rag/evaluation/`)
+#### 2c. Evaluation Module (`src/rag/evaluation/`)
 
 **Purpose:** Measure quality using RAGAS
 
@@ -259,7 +306,7 @@ if evaluator.passes_quality_gate(scores):
     print("✅ High quality!")
 ```
 
-#### 2d. Retrieval Module (`rag/retrieval/`)
+#### 2d. Retrieval Module (`src/rag/retrieval/`)
 
 **Purpose:** Semantic search using vector embeddings
 
@@ -579,9 +626,9 @@ async def test_my_new_feature():
 3. Look at prompt templates
 
 **Day 3: Understand Agent**
-1. Read `agent/README.md`
-2. Trace through `controller.py`
-3. Try modifying a prompt
+1. Read `src/README.md` (architecture overview)
+2. Trace through `src/agent/controllers/agent_controller.py`
+3. Try modifying a prompt in `src/agent/prompts/`
 
 **Day 4: Run Tests**
 1. Run test suite: `pytest`
@@ -599,12 +646,13 @@ async def test_my_new_feature():
 
 **Looking for:**
 - **How synthesis works?** → `src/rag/synthesis/synthesizer.py`
-- **How agent plans?** → `agent/controller.py` → `_plan()`
-- **Prompt templates?** → `src/rag/synthesis/templates/`
-- **How to add tools?** → `agent/tools.py`
+- **How agent plans?** → `src/agent/controllers/step_executor.py` → `plan()`
+- **Prompt templates?** → `src/rag/synthesis/templates/` & `src/agent/prompts/`
+- **How to add tools?** → `src/agent/tools/registry.py` & `src/agent/tools/base.py`
 - **Database schema?** → `database/migrations/001_initial_schema.sql`
 - **How to evaluate quality?** → `src/rag/evaluation/evaluator.py`
-- **Tests?** → `tests/unit/rag/`
+- **Tests?** → `tests/unit/agent/` & `tests/unit/rag/` & `tests/unit/core/`
+- **How to use the library?** → `src/README.md` (beginner-friendly guide!)
 - **Dashboard pages?** → `dashboard/views/`
 
 ---

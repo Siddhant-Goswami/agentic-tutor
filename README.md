@@ -18,17 +18,6 @@ This isn't just another chatbot - it's a **fully autonomous agent** that:
 - ✅ **Evaluates quality** using RAGAS metrics (faithfulness, precision, recall)
 - 💬 **Works everywhere** - Streamlit dashboard, Claude Desktop (MCP), or standalone Python
 
-### 🎉 Recently Completed Migration!
-
-This project was just **fully refactored** to a clean, modular architecture:
-- ✅ **Single source of truth** - All logic in `src/` library
-- ✅ **131 tests passing** (98.5% success rate)
-- ✅ **Removed 4,539 lines** of duplicate code
-- ✅ **100% type coverage** with protocol-based design
-- ✅ **Zero duplication** - dashboard and MCP server both use `src/`
-
-See [MIGRATION_COMPLETE.md](./MIGRATION_COMPLETE.md) for the full story!
-
 ---
 
 ## 🚀 Quick Start
@@ -43,7 +32,7 @@ See [MIGRATION_COMPLETE.md](./MIGRATION_COMPLETE.md) for the full story!
 
 ```bash
 # 1. Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/Siddhant-Goswami/agentic-tutor.git
 cd agentic-tutor
 
 # 2. Install dependencies
@@ -584,7 +573,7 @@ python -m src.ingestion.rss_ingestion
 
 2. **Main README** (this file) - Project overview and setup
 
-3. **[MIGRATION_COMPLETE.md](./MIGRATION_COMPLETE.md)** - Migration story
+3. **[Migration Story](./.claude/tasks/MIGRATION_COMPLETE.md)** - Complete refactoring journey
    - Why we refactored to `src/`
    - Before/after comparison
    - Benefits achieved
@@ -645,13 +634,11 @@ Built with love using:
 - [Streamlit](https://streamlit.io) - Dashboard UI
 
 Special thanks to:
-- **100xEngineers AI Bootcamp** - For the learning journey
-- **Claude** - For pair programming this entire project
+- **100xEngineers Team** - For the learning journey
+- **Claude** - For pair programming this project
 - **Open source community** - For amazing tools and libraries
 
 ---
-
-## 🌟 Star History
 
 If you find this project helpful, please consider giving it a star! ⭐
 
@@ -661,10 +648,8 @@ If you find this project helpful, please consider giving it a star! ⭐
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/agentic-tutor/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/agentic-tutor/discussions)
-- **Email**: your-email@example.com
+- **Email**: siddhant@100xengineers.com
 
 ---
 
-**Made with ❤️ by [Your Name]**
-
-**Happy Learning! 🚀📚**
+**Made with ❤️ by Siddhant Goswami and Claude Code**
