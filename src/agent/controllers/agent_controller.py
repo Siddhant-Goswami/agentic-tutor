@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Optional
 from openai import AsyncOpenAI
 
-from agent.logger import AgentLogger
-from agent.tools import ToolRegistry
+from src.agent.utils.logger import AgentLogger
+from src.agent.tools.registry import ToolRegistry
 from src.agent.models.agent_config import AgentConfig
 from src.agent.models.agent_result import AgentResult
 from src.agent.controllers.step_executor import StepExecutor

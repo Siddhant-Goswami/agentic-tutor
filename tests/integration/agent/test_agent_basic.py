@@ -20,8 +20,9 @@ env_path = project_root / "learning-coach-mcp" / ".env"
 load_dotenv(env_path)
 
 # Import agent components
-from agent.controller import AgentController, AgentConfig
-from agent.logger import AgentLogger
+from src.agent.controllers.agent_controller import AgentController
+from src.agent.models.agent_config import AgentConfig
+from src.agent.utils.logger import AgentLogger
 
 
 def print_header(text):

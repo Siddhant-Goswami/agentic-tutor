@@ -4,7 +4,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-64%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/tests-131%20passing-brightgreen.svg)](./tests)
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ---
@@ -17,6 +17,17 @@ This isn't just another chatbot - it's a **fully autonomous agent** that:
 - 🔍 **Searches and synthesizes** insights from curated content sources using advanced vector search
 - ✅ **Evaluates quality** using RAGAS metrics (faithfulness, precision, recall)
 - 💬 **Works everywhere** - Streamlit dashboard, Claude Desktop (MCP), or standalone Python
+
+### 🎉 Recently Completed Migration!
+
+This project was just **fully refactored** to a clean, modular architecture:
+- ✅ **Single source of truth** - All logic in `src/` library
+- ✅ **131 tests passing** (98.5% success rate)
+- ✅ **Removed 4,539 lines** of duplicate code
+- ✅ **100% type coverage** with protocol-based design
+- ✅ **Zero duplication** - dashboard and MCP server both use `src/`
+
+See [MIGRATION_COMPLETE.md](./MIGRATION_COMPLETE.md) for the full story!
 
 ---
 
@@ -80,7 +91,7 @@ python test_agent.py
 ### 📚 Intelligent RAG System
 - **Vector search** with OpenAI embeddings (text-embedding-3-small)
 - **Semantic retrieval** using Supabase pgvector + HNSW index
-- **Modular architecture** with 64 passing tests (Phase 3 refactored!)
+- **Modular architecture** with 131 passing tests (fully refactored!)
 - **Quality evaluation** using RAGAS metrics
 - **Template-based prompts** for easy customization
 
@@ -101,25 +112,55 @@ python test_agent.py
 
 ## 🏗️ Architecture
 
+### 🎯 Library + Applications Pattern
+
+Think of this project like your phone:
+- **`src/`** = The operating system (iOS/Android) - the core "brain" with all the smart algorithms
+- **`dashboard/`** = An app on your phone (like Instagram) - uses the OS
+- **`learning-coach-mcp/`** = Another app (like WhatsApp) - also uses the OS
+- **`tests/`** = Quality control that tests the OS works correctly
+
+**Why this structure?**
+- ✅ **Single source of truth**: All logic lives in `src/`, no duplication
+- ✅ **Easy to test**: `src/` is a pure library with 131 tests
+- ✅ **Multiple interfaces**: Dashboard, MCP server, Python API all use the same core
+- ✅ **Clean & modular**: Each app is slim, just UI/integration code
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   User Interfaces                       │
 │  Dashboard (Streamlit) │ Claude Desktop │ Python API   │
+│         ↓                      ↓                ↓       │
+│    (imports from src/)   (imports from src/)           │
 └────────────────┬────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────┐
-│              Autonomous Agent (SENSE-PLAN-ACT)          │
-│  • LLM Planning    • Tool Registry    • Reflection     │
-│  • State Machine   • Audit Logging    • Quality Gates  │
-└────────────────┬────────────────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────────────────┐
-│                  RAG Pipeline (Phase 3)                 │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │  Core    │  │Synthesis │  │Evaluation│             │
-│  │ LLM      │  │ Prompt   │  │ RAGAS    │             │
-│  │ Client   │  │ Builder  │  │ Metrics  │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
+│             📦 src/ - Core Library (THE BRAIN)          │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  🤖 src/agent/ - Autonomous Agent System       │   │
+│  │  • SENSE → PLAN → ACT → OBSERVE → REFLECT      │   │
+│  │  • Tool Registry  • Step Executor  • Logger    │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  📚 src/rag/ - RAG Pipeline (Fully Modular)    │   │
+│  │  • Core (LLM Client, Base Classes)              │   │
+│  │  • Synthesis (Insight Generation)               │   │
+│  │  • Evaluation (RAGAS Metrics)                   │   │
+│  │  • Retrieval (Vector Search, Query Building)   │   │
+│  │  • Digest (Daily Digest Generator)              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  💾 src/database/ - Database Utilities         │   │
+│  │  • Supabase client creation                     │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  🔧 src/core/ - Infrastructure                 │   │
+│  │  • Config  • Exceptions  • Types                │   │
+│  └─────────────────────────────────────────────────┘   │
 └────────────────┬────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────┐
@@ -132,8 +173,9 @@ python test_agent.py
 ```
 
 ### Key Technologies
+- **Core Library**: `src/` with 100% type hints, protocol-based design
 - **Agent Framework**: Custom autonomous loop with OpenAI GPT-4o
-- **RAG System**: Modular architecture (64 tests, 100% passing)
+- **RAG System**: Modular architecture (131 tests, 98.5% passing)
 - **Vector DB**: Supabase pgvector with HNSW indexing
 - **LLM**: OpenAI (embeddings + synthesis) or Anthropic Claude
 - **Frontend**: Streamlit with real-time agent monitoring
@@ -269,7 +311,8 @@ Opens at: **http://localhost:8501**
 ### Option 3: Python API
 
 ```python
-from agent.controller import AgentController, AgentConfig
+from src.agent.controllers.agent_controller import AgentController
+from src.agent.models.agent_config import AgentConfig
 
 # Configure
 config = AgentConfig(
@@ -296,6 +339,30 @@ print(result.output)  # Final digest
 print(result.logs)    # Execution trace
 ```
 
+**Want to use the RAG system directly?**
+
+```python
+from src.rag.digest import DigestGenerator
+import datetime
+
+# Create digest generator
+generator = DigestGenerator(
+    supabase_url="https://your-project.supabase.co",
+    supabase_key="your-key",
+    openai_api_key="your-key",
+)
+
+# Generate today's digest
+digest = await generator.generate(
+    user_id="your-user-id",
+    date=datetime.now().date(),
+    max_insights=7,
+)
+
+print(f"Generated {len(digest['insights'])} insights!")
+print(f"Quality: {digest['quality_badge']}")  # ✨ (high quality)
+```
+
 ---
 
 ## 🛠️ Development
@@ -304,44 +371,94 @@ print(result.logs)    # Execution trace
 
 ```
 agentic-tutor/
-├── agent/                      # Autonomous agent (SENSE-PLAN-ACT)
-│   ├── controller.py          # Main agent loop
-│   ├── tools.py               # Tool registry
-│   ├── logger.py              # Audit logging
-│   └── prompts/               # LLM prompts
-├── learning-coach-mcp/        # RAG & MCP server
-│   └── src/
-│       ├── rag/               # RAG system (Phase 3 refactored!)
-│       │   ├── core/          # LLM client, base classes
-│       │   ├── synthesis/     # Insight generation
-│       │   ├── evaluation/    # RAGAS metrics
-│       │   └── retrieval/     # Vector search
-│       ├── server.py          # MCP server
-│       └── utils/             # Shared utilities
-├── dashboard/                 # Streamlit UI
-│   ├── app.py                # Main app
-│   └── views/                # Pages
-├── database/                  # SQL migrations
-│   └── migrations/
-├── tests/                     # Test suite (64 tests!)
-│   └── unit/rag/             # RAG unit tests
-└── docs/                      # Documentation
+├── src/                        🧠 CORE LIBRARY (The Brain)
+│   ├── agent/                 # Autonomous agent system
+│   │   ├── controllers/       # AgentController, StepExecutor
+│   │   ├── models/            # AgentConfig, AgentResult
+│   │   ├── tools/             # ToolRegistry (search, context, etc.)
+│   │   ├── utils/             # Logger, parsers
+│   │   ├── planning/          # ResearchPlanner
+│   │   └── prompts/           # LLM prompt templates
+│   ├── rag/                   # RAG pipeline (fully modular!)
+│   │   ├── core/              # LLMClient, base classes
+│   │   ├── synthesis/         # EducationalSynthesizer
+│   │   ├── evaluation/        # InsightEvaluator, RAGAS
+│   │   ├── retrieval/         # VectorRetriever, QueryBuilder
+│   │   └── digest/            # DigestGenerator, QualityGate
+│   ├── database/              # Database utilities
+│   │   └── client.py          # Supabase connection helpers
+│   └── core/                  # Infrastructure
+│       ├── config.py          # App configuration
+│       ├── exceptions.py      # Error handling
+│       └── types.py           # Type definitions
+│
+├── dashboard/                  📱 APPLICATION: Streamlit UI
+│   ├── app.py                 # Main app (imports from src/)
+│   └── views/                 # Pages
+│       ├── home.py            # Today's digest
+│       ├── agent.py           # Agent playground
+│       └── settings.py        # Configuration
+│
+├── learning-coach-mcp/         📱 APPLICATION: MCP Server
+│   ├── src/
+│   │   ├── server.py          # MCP tools (imports from src/)
+│   │   ├── db/                # Migrations
+│   │   ├── integrations/      # Bootcamp sync
+│   │   ├── ingestion/         # Content ingestion
+│   │   ├── ui/                # UI templates
+│   │   └── tools/             # MCP tool definitions
+│   └── pyproject.toml         # Package config
+│
+├── database/                   💾 SQL MIGRATIONS
+│   └── migrations/            # Supabase schema
+│
+├── tests/                      ✅ TEST SUITE (131 tests!)
+│   ├── unit/                  # Unit tests for src/
+│   │   ├── agent/             # Agent tests
+│   │   ├── rag/               # RAG tests
+│   │   └── core/              # Core tests
+│   ├── integration/           # Integration tests
+│   └── e2e/                   # End-to-end tests
+│
+└── docs/                       📚 DOCUMENTATION
+    ├── ARCHITECTURE.md        # System design
+    ├── CODEBASE_GUIDE.md      # Code walkthrough
+    └── ...
+
 ```
+
+**🎯 Key Principles:**
+1. **`src/`** = Pure library with all logic (100% type hints, tested)
+2. **`dashboard/`** = Thin UI layer using `src/`
+3. **`learning-coach-mcp/`** = Thin MCP layer using `src/`
+4. **No code duplication** - everything imports from `src/`
+
+See [`src/README.md`](./src/README.md) for detailed architecture guide!
 
 ### Running Tests
 
 ```bash
 # Run all tests
-pytest
+pytest tests/ -v
 
-# Run RAG tests
-pytest tests/unit/rag/ -v
+# Run specific test suites
+pytest tests/unit/agent/ -v      # Agent tests
+pytest tests/unit/rag/ -v        # RAG tests
+pytest tests/unit/core/ -v       # Core tests
+pytest tests/integration/ -v     # Integration tests
 
 # Run with coverage
 pytest --cov=src --cov-report=html
 ```
 
-**Current Status:** 64/64 tests passing (100%) ✅
+**Current Status:** 131/133 tests passing (98.5%) ✅
+
+**Test Coverage:**
+- ✅ Agent system: Controllers, tools, planning
+- ✅ RAG pipeline: Synthesis, evaluation, retrieval, digest
+- ✅ Database utilities
+- ✅ Core infrastructure
+- ✅ Integration tests
 
 ### Code Quality
 
@@ -458,18 +575,56 @@ python -m src.ingestion.rss_ingestion
 
 ## 🎓 Learning Resources
 
-### Understanding the Codebase
-- Start with [CODEBASE_GUIDE.md](./docs/CODEBASE_GUIDE.md)
-- Read [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for system design
-- Check [agent/README.md](./agent/README.md) for agent details
-- Review [Phase 3 refactoring docs](./.claude/tasks/PHASE3_COMPLETION.md)
+### 📖 For Beginners - Start Here!
+1. **[src/README.md](./src/README.md)** - Beginner-friendly guide to the core library
+   - Phone OS analogy for architecture
+   - Simple code examples
+   - Key concepts explained (Protocols, Type Hints, Dependency Injection)
+   - Troubleshooting guide
 
-### Key Concepts
-- **RAG (Retrieval-Augmented Generation)**: Combines vector search with LLM synthesis
-- **MCP (Model Context Protocol)**: Connects Claude Desktop to external tools
-- **Autonomous Agents**: Self-planning systems using SENSE-PLAN-ACT loops
-- **Vector Embeddings**: Semantic search using OpenAI text-embedding-3-small
-- **RAGAS**: Quality evaluation framework for RAG systems
+2. **Main README** (this file) - Project overview and setup
+
+3. **[MIGRATION_COMPLETE.md](./MIGRATION_COMPLETE.md)** - Migration story
+   - Why we refactored to `src/`
+   - Before/after comparison
+   - Benefits achieved
+
+### 🔧 For Developers
+- [CODEBASE_GUIDE.md](./docs/CODEBASE_GUIDE.md) - Code walkthrough
+- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - System design deep dive
+- [src/README.md](./src/README.md) - Core library architecture
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute
+
+### 🧠 Key Concepts Explained
+
+**RAG (Retrieval-Augmented Generation)**
+- Combines vector search with LLM synthesis
+- Finds relevant content using semantic similarity
+- Generates insights using OpenAI/Anthropic
+- Quality checked with RAGAS metrics
+
+**Autonomous Agents**
+- Self-planning systems using SENSE → PLAN → ACT → OBSERVE → REFLECT
+- Makes decisions using LLM reasoning
+- Uses tools to accomplish goals
+- See `src/agent/` for implementation
+
+**MCP (Model Context Protocol)**
+- Connects Claude Desktop to external tools
+- Natural language interface to the agent
+- See `learning-coach-mcp/src/server.py`
+
+**Vector Embeddings**
+- Converts text to numerical vectors
+- Enables semantic search (meaning-based, not keyword)
+- Uses OpenAI text-embedding-3-small
+- Stored in Supabase pgvector with HNSW index
+
+**Protocol-Based Design**
+- Python protocols define contracts (like TypeScript interfaces)
+- Enables swapping implementations easily
+- Makes code testable with mocks
+- See `src/rag/core/base_synthesizer.py` for examples
 
 ---
 

@@ -3,20 +3,142 @@ Digest Generator
 
 Orchestrates the full RAG pipeline to generate personalized daily digests.
 Combines query building, retrieval, and synthesis.
+
+Migrated to src/rag/digest/ as part of refactoring Phase 3.
 """
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
-from supabase import Client
+from typing import Dict, Any, Optional, List, Tuple
+from supabase import Client, create_client
 
-from rag.query_builder import QueryBuilder
-from rag.retriever import VectorRetriever
-from rag.synthesizer import EducationalSynthesizer
-from rag.evaluator import RAGASEvaluator, QualityGate
-from utils.db import get_supabase_client
+from src.rag.retrieval.query_builder import QueryBuilder
+from src.rag.retrieval.retriever import VectorRetriever
+from src.rag.synthesis.synthesizer import EducationalSynthesizer
+from src.rag.evaluation.evaluator import InsightEvaluator
+from src.rag.evaluation.metrics import RAGASMetrics
+from src.rag.core.llm_client import LLMClient, LLMProvider
 
 logger = logging.getLogger(__name__)
+
+
+class QualityGate:
+    """Manages quality gating with retry logic."""
+
+    def __init__(
+        self,
+        evaluator: InsightEvaluator,
+        max_retries: int = 2,
+        timeout_minutes: int = 15,
+    ):
+        """
+        Initialize quality gate.
+
+        Args:
+            evaluator: Insight evaluator instance
+            max_retries: Maximum retry attempts (default: 2)
+            timeout_minutes: Maximum total time for quality gate in minutes (default: 15)
+        """
+        self.evaluator = evaluator
+        self.max_retries = max_retries
+        self.timeout_seconds = timeout_minutes * 60
+
+    async def apply_gate(
+        self,
+        query: str,
+        insights: List[Dict[str, Any]],
+        retrieved_chunks: List[Dict[str, Any]],
+        synthesizer: EducationalSynthesizer,
+        learning_context: Dict[str, Any],
+        retry_count: int = 0,
+        start_time: Optional[float] = None,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, float], bool]:
+        """
+        Apply quality gate with retry logic.
+
+        Args:
+            query: Original query
+            insights: Generated insights
+            retrieved_chunks: Retrieved chunks
+            synthesizer: Synthesizer instance for retries
+            learning_context: Learning context
+            retry_count: Current retry attempt
+            start_time: Start time for timeout tracking (internal use)
+
+        Returns:
+            Tuple of (final_insights, final_scores, passed)
+        """
+        # Track start time for timeout
+        if start_time is None:
+            start_time = datetime.now().timestamp()
+
+        # Check timeout
+        elapsed_time = datetime.now().timestamp() - start_time
+        if elapsed_time > self.timeout_seconds:
+            logger.warning(
+                f"⏱️ Quality gate timeout after {elapsed_time/60:.1f} minutes. "
+                f"Delivering current insights with warning."
+            )
+            # Return placeholder scores and mark as failed
+            placeholder_scores = {
+                "faithfulness": 0.0,
+                "context_precision": 0.0,
+                "context_recall": 0.0,
+                "average": 0.0,
+            }
+            return (insights, placeholder_scores, False)
+
+        # Evaluate current insights
+        if retry_count == 0:
+            logger.info("🔍 Evaluating digest quality with RAGAS (this may take 2-3 minutes)...")
+        scores = await self.evaluator.evaluate_digest(
+            query=query,
+            insights=insights,
+            retrieved_chunks=retrieved_chunks,
+        )
+
+        # Check if passes
+        if self.evaluator.passes_quality_gate(scores):
+            logger.info("✓ Quality gate passed")
+            return (insights, scores, True)
+
+        # If failed and retries available
+        if retry_count < self.max_retries:
+            logger.warning(
+                f"Quality gate failed (attempt {retry_count + 1}/{self.max_retries + 1}), "
+                f"retrying with stricter synthesis..."
+            )
+            logger.info(f"📊 Current scores - Faithfulness: {scores['faithfulness']:.3f}, "
+                       f"Precision: {scores['context_precision']:.3f}, "
+                       f"Recall: {scores['context_recall']:.3f}")
+
+            logger.info("🔄 Regenerating insights with stricter mode (this may take 3-4 minutes)...")
+
+            # Retry with stricter synthesis
+            retry_result = await synthesizer.synthesize_insights(
+                retrieved_chunks=retrieved_chunks,
+                learning_context=learning_context,
+                query=query,
+                num_insights=len(insights),
+                stricter=True,  # Enable strict mode
+            )
+
+            new_insights = retry_result["insights"]
+
+            # Recursively check new insights
+            return await self.apply_gate(
+                query=query,
+                insights=new_insights,
+                retrieved_chunks=retrieved_chunks,
+                synthesizer=synthesizer,
+                learning_context=learning_context,
+                retry_count=retry_count + 1,
+                start_time=start_time,
+            )
+
+        # Out of retries
+        logger.warning(f"Quality gate failed after {self.max_retries} retries, delivering anyway")
+        return (insights, scores, False)
 
 
 class DigestGenerator:
@@ -46,7 +168,7 @@ class DigestGenerator:
             ragas_min_score: Minimum RAGAS score for quality gate
             ragas_max_retries: Maximum retry attempts for quality gate
         """
-        self.db = get_supabase_client(supabase_url, supabase_key)
+        self.db = self._get_supabase_client(supabase_url, supabase_key)
 
         self.query_builder = QueryBuilder(
             supabase_url=supabase_url,
@@ -60,37 +182,69 @@ class DigestGenerator:
             embedding_model=embedding_model,
         )
 
-        # Create synthesizer (prefer OpenAI, fallback to Anthropic if provided)
+        # Create synthesizer using new architecture
         if openai_api_key:
-            self.synthesizer = EducationalSynthesizer(
-                api_key=openai_api_key,
+            llm_client = LLMClient(
+                provider=LLMProvider.OPENAI,
                 model=synthesis_model,
-                use_openai=True,
+                api_key=openai_api_key,
             )
             self.use_openai = True
             logger.info(f"Using OpenAI for synthesis: {synthesis_model}")
         elif anthropic_api_key:
-            self.synthesizer = EducationalSynthesizer(
-                api_key=anthropic_api_key,
+            llm_client = LLMClient(
+                provider=LLMProvider.ANTHROPIC,
                 model=synthesis_model,
-                use_openai=False,
+                api_key=anthropic_api_key,
             )
             self.use_openai = False
             logger.info(f"Using Anthropic for synthesis: {synthesis_model}")
         else:
             logger.error("Either OPENAI_API_KEY or ANTHROPIC_API_KEY required for synthesis")
-            self.synthesizer = None
+            llm_client = None
             self.use_openai = True
 
-        # RAGAS evaluation and quality gate
-        self.evaluator = RAGASEvaluator(
+        if llm_client:
+            from src.rag.synthesis.prompt_builder import PromptBuilder
+            from src.rag.synthesis.parsers import InsightParser
+
+            self.synthesizer = EducationalSynthesizer(
+                llm_client=llm_client,
+                prompt_builder=PromptBuilder(),
+                parser=InsightParser(),
+            )
+        else:
+            self.synthesizer = None
+
+        # RAGAS evaluation and quality gate using new architecture
+        metrics = RAGASMetrics(openai_api_key=openai_api_key)
+        self.evaluator = InsightEvaluator(
+            metrics=metrics,
             min_score=ragas_min_score,
-            openai_api_key=openai_api_key,
         )
         self.quality_gate = QualityGate(
             evaluator=self.evaluator,
             max_retries=ragas_max_retries,
         )
+
+    def _get_supabase_client(self, url: str, key: str) -> Client:
+        """
+        Create and return a Supabase client.
+
+        Args:
+            url: Supabase project URL
+            key: Supabase API key
+
+        Returns:
+            Supabase client instance
+        """
+        try:
+            client = create_client(url, key)
+            logger.debug("Supabase client created successfully")
+            return client
+        except Exception as e:
+            logger.error(f"Failed to create Supabase client: {e}")
+            raise
 
     async def generate(
         self,
@@ -161,7 +315,7 @@ class DigestGenerator:
                 date,
                 "API key not configured. Please add OPENAI_API_KEY or ANTHROPIC_API_KEY to your environment."
             )
-        
+
         synthesis_result = await self.synthesizer.synthesize_insights(
             retrieved_chunks=chunks,
             learning_context=learning_context,
@@ -211,7 +365,7 @@ class DigestGenerator:
             },
         }
 
-        # 6. Store digest in database (with cache)
+        # 7. Store digest in database (with cache)
         await self._store_digest(user_id, digest)
 
         logger.info(f"Digest generated successfully: {len(insights)} insights")
@@ -261,6 +415,7 @@ class DigestGenerator:
                 "quality_badge": self._determine_quality_badge(
                     result.data.get("ragas_scores", {})
                 ),
+                "quality_passed": result.data.get("quality_passed", True),
                 "generated_at": result.data["generated_at"],
                 "metadata": result.data.get("metadata", {}),
                 "cached": True,
@@ -289,6 +444,7 @@ class DigestGenerator:
                     "digest_date": digest["date"],
                     "insights": digest["insights"],
                     "ragas_scores": digest.get("ragas_scores", {}),
+                    "quality_passed": digest.get("quality_passed", True),
                     "generated_at": digest["generated_at"],
                     "cache_expires_at": cache_expires_at.isoformat(),
                     "metadata": digest.get("metadata", {}),
@@ -318,6 +474,7 @@ class DigestGenerator:
             "insights": [],
             "ragas_scores": {},
             "quality_badge": "⚠️",
+            "quality_passed": False,
             "generated_at": datetime.now().isoformat(),
             "metadata": {
                 "error": reason,

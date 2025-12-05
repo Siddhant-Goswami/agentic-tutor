@@ -10,7 +10,7 @@ from datetime import datetime
 from openai import AsyncOpenAI
 from supabase import Client
 
-from ..utils.db import get_supabase_client
+from src.database.client import get_supabase_client
 
 logger = logging.getLogger(__name__)
 

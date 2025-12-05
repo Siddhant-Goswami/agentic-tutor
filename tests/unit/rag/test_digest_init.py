@@ -18,8 +18,8 @@ openai_key = os.getenv("OPENAI_API_KEY")
 logger.info(f"OpenAI API key loaded: {bool(openai_key)}")
 logger.info(f"OpenAI API key (first 15 chars): {openai_key[:15] if openai_key else 'None'}")
 
-# Import DigestGenerator
-from rag.digest_generator import DigestGenerator
+# Import DigestGenerator from new location
+from src.rag.digest import DigestGenerator
 
 # Initialize
 logger.info("\n" + "="*60)

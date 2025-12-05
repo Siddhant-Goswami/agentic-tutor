@@ -11,8 +11,8 @@ import uuid
 from typing import Dict, Any
 from openai import AsyncOpenAI
 
-from agent.logger import AgentLogger
-from agent.tools import ToolRegistry
+from src.agent.utils.logger import AgentLogger
+from src.agent.tools.registry import ToolRegistry
 from src.agent.utils.response_parser import (
     parse_json_response,
     summarize_result,

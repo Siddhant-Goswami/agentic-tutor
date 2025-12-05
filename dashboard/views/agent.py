@@ -310,7 +310,7 @@ def execute_web_search_sync(query: str, max_results: int = 5) -> dict:
         Search results dictionary
     """
     try:
-        from agent.tools import ToolRegistry
+        from src.agent.tools.registry import ToolRegistry
         import asyncio
 
         # Initialize tool registry
@@ -350,7 +350,8 @@ def run_agent_async(goal: str, user_id: str) -> dict:
         Agent result dictionary
     """
     try:
-        from agent.controller import AgentController, AgentConfig
+        from src.agent.controllers.agent_controller import AgentController
+        from src.agent.models.agent_config import AgentConfig
 
         # Get config
         config = AgentConfig(

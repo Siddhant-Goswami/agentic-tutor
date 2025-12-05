@@ -64,8 +64,8 @@ async def generate_daily_digest(
     logger.info(f"Generating daily digest: date={date}, max_insights={max_insights}")
 
     try:
-        # Import here to avoid circular dependencies
-        from .rag.digest_generator import DigestGenerator
+        # Import from refactored src/ module
+        from src.rag.digest import DigestGenerator
 
         generator = DigestGenerator(
             supabase_url=SUPABASE_URL,
